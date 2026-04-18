@@ -1,34 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import AdminTable, { Column } from '@/components/Admin/AdminTable';
 import Pagination from '@/components/Admin/Pagination';
 import ViewButton from '@/components/Admin/ViewButton';
+import { adminAccountApi, TaiKhoanItem } from '@/shared/adminAccountApi';
+import { useToast } from '@/components/Admin/Toast';
 
-type Account = {
-    id: string;
-    name: string;
-    email: string;
-    type: string;
-    date: string;
-    status: string;
-};
-
-const initialAccounts: Account[] = [
-    { id: 'B01', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Người dùng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'C02', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Nhà sáng tạo', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'O03', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Cửa hàng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'B04', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Người dùng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'B05', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Người dùng', date: '22/02/2024, 10:05 SA', status: 'Khóa' },
-    { id: 'O01', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Cửa hàng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'O02', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Cửa hàng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'O07', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Cửa hàng', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'C08', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Nhà sáng tạo', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-    { id: 'C09', name: 'Nguyễn Văn A', email: 'nguyenvana@gmail.com', type: 'Nhà sáng tạo', date: '22/02/2024, 10:05 SA', status: 'Hoạt động' },
-];
-
-const statusOptions = ['Trạng thái', 'Hoạt động', 'Khóa'];
+const statusOptions = ['Trạng thái', 'Hoạt động', 'Bị khóa'];
 const typeOptions = ['Loại tài khoản', 'Người dùng', 'Nhà sáng tạo', 'Cửa hàng'];
+const OTHER_LOCK_REASON = 'Khác';
 
 const lockReasons = [
     'Vi phạm nội dung / cộng đồng',
@@ -39,19 +20,35 @@ const lockReasons = [
     'Khác',
 ];
 
+const loaiMap: Record<string, string> = {
+    'Người dùng': 'nguoi_dung',
+    'Nhà sáng tạo': 'nha_sang_tao',
+    'Cửa hàng': 'chu_cua_hang',
+};
+
+const loaiLabel: Record<string, string> = {
+    nguoi_dung: 'Người dùng',
+    nha_sang_tao: 'Nhà sáng tạo',
+    chu_cua_hang: 'Cửa hàng',
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+}
+
 const getTypeBadgeStyle = (type: string) => {
     switch (type) {
-        case 'Người dùng': return 'text-green-600 border-green-500 bg-green-50';
-        case 'Nhà sáng tạo': return 'text-orange-500 border-orange-400 bg-orange-50';
-        case 'Cửa hàng': return 'text-blue-500 border-blue-400 bg-blue-50';
+        case 'nguoi_dung': return 'text-green-600 border-green-500 bg-green-50';
+        case 'nha_sang_tao': return 'text-orange-500 border-orange-400 bg-orange-50';
+        case 'chu_cua_hang': return 'text-blue-500 border-blue-400 bg-blue-50';
         default: return 'text-gray-600 border-gray-300 bg-gray-50';
     }
 };
 
 const getStatusBadgeStyle = (status: string) => {
     switch (status) {
-        case 'Hoạt động': return 'text-green-600 border-green-500 bg-green-50';
-        case 'Khóa': return 'text-red-500 border-red-400 bg-red-50';
+        case 'hoat_dong': return 'text-green-600 border-green-500 bg-green-50';
+        case 'bi_khoa': return 'text-red-500 border-red-400 bg-red-50';
         default: return 'text-gray-600 border-gray-300 bg-gray-50';
     }
 };
@@ -59,50 +56,91 @@ const getStatusBadgeStyle = (status: string) => {
 const ITEMS_PER_PAGE = 10;
 
 export default function AccountsPage() {
-    const [accounts, setAccounts] = useState(initialAccounts);
+    const toast = useToast();
+    const [accounts, setAccounts] = useState<TaiKhoanItem[]>([]);
+    const [totalPages, setTotalPages] = useState(1);
     const [selectedStatus, setSelectedStatus] = useState('Trạng thái');
     const [selectedType, setSelectedType] = useState('Loại tài khoản');
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [loading, setLoading] = useState(true);
 
-    // Lock Modal State
     const [showLockModal, setShowLockModal] = useState(false);
-    const [selectedAccountId, setSelectedAccountId] = useState('');
+    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [selectedReason, setSelectedReason] = useState('');
+    const [customReason, setCustomReason] = useState('');
+    const [actionLoading, setActionLoading] = useState(false);
 
-    const openLockModal = (id: string) => {
-        setSelectedAccountId(id);
-        setShowLockModal(true);
-    };
+    const fetchAccounts = useCallback(async () => {
+        setLoading(true);
+        try {
+            const trangThaiParam = selectedStatus === 'Hoạt động' ? 'hoat_dong' : selectedStatus === 'Bị khóa' ? 'bi_khoa' : undefined;
+            const loaiParam = loaiMap[selectedType] || undefined;
 
-    const handleConfirmLock = () => {
-        if (selectedAccountId && selectedReason) {
-            setAccounts(accounts.map((acc) =>
-                acc.id === selectedAccountId ? { ...acc, status: 'Khóa' } : acc
-            ));
+            const res = await adminAccountApi.layDanhSach({
+                tim_kiem: searchQuery || undefined,
+                loai_tai_khoan: loaiParam,
+                trang_thai: trangThaiParam,
+                trang: currentPage,
+                so_luong: ITEMS_PER_PAGE,
+            });
+            const visibleAccounts = res.du_lieu.filter((item) => item.loai_tai_khoan !== 'admin');
+            setAccounts(visibleAccounts);
+            setTotalPages(res.tong_trang || 1);
+        } catch {
+            setAccounts([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [searchQuery, selectedStatus, selectedType, currentPage]);
+
+    useEffect(() => {
+        fetchAccounts();
+    }, [fetchAccounts]);
+
+    const finalReason = selectedReason === OTHER_LOCK_REASON ? customReason.trim() : selectedReason;
+
+    const handleConfirmLock = async () => {
+        if (!selectedAccountId || !finalReason) return;
+        setActionLoading(true);
+        try {
+            await adminAccountApi.khoaTaiKhoan(selectedAccountId, finalReason);
             setShowLockModal(false);
-            setSelectedAccountId('');
+            setSelectedAccountId(null);
             setSelectedReason('');
+            setCustomReason('');
+            toast.success('Đã khóa tài khoản thành công');
+            await fetchAccounts();
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, 'Không thể khóa tài khoản'));
+        } finally {
+            setActionLoading(false);
         }
     };
 
-    const filteredAccounts = accounts.filter((a) => {
-        const statusMatch = selectedStatus === 'Trạng thái' || a.status === selectedStatus;
-        const typeMatch = selectedType === 'Loại tài khoản' || a.type === selectedType;
-        const searchMatch = !searchQuery ||
-            a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            a.id.toLowerCase().includes(searchQuery.toLowerCase());
-        return statusMatch && typeMatch && searchMatch;
-    });
+    const handleConfirmUnlock = async () => {
+        if (!selectedAccountId) return;
+        setActionLoading(true);
+        try {
+            await adminAccountApi.moKhoaTaiKhoan(selectedAccountId);
+            setShowUnlockModal(false);
+            setSelectedAccountId(null);
+            toast.success('Đã mở khóa tài khoản thành công');
+            await fetchAccounts();
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, 'Không thể mở khóa tài khoản'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
-    const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE);
-    const paginatedAccounts = filteredAccounts.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    );
+    const formatDate = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    };
 
-    const columns: Column<Account>[] = [
+    const columns: Column<TaiKhoanItem>[] = [
         {
             key: 'id',
             label: 'ID',
@@ -111,7 +149,7 @@ export default function AccountsPage() {
         {
             key: 'name',
             label: 'Tên người dùng',
-            render: (row) => <span className="text-gray-700">{row.name}</span>,
+            render: (row) => <span className="text-gray-700">{row.ten_hien_thi}</span>,
         },
         {
             key: 'email',
@@ -123,8 +161,8 @@ export default function AccountsPage() {
             label: 'Loại tài khoản',
             align: 'center',
             render: (row) => (
-                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getTypeBadgeStyle(row.type)}`}>
-                    {row.type}
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getTypeBadgeStyle(row.loai_tai_khoan)}`}>
+                    {loaiLabel[row.loai_tai_khoan] || row.loai_tai_khoan}
                 </span>
             ),
         },
@@ -133,8 +171,8 @@ export default function AccountsPage() {
             label: 'Trạng thái',
             align: 'center',
             render: (row) => (
-                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadgeStyle(row.status)}`}>
-                    {row.status === 'Khóa' ? 'Bị khóa' : row.status}
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadgeStyle(row.trang_thai)}`}>
+                    {row.trang_thai === 'bi_khoa' ? 'Bị khóa' : row.trang_thai === 'hoat_dong' ? 'Hoạt động' : row.trang_thai}
                 </span>
             ),
         },
@@ -142,7 +180,7 @@ export default function AccountsPage() {
             key: 'date',
             label: 'Ngày tạo',
             align: 'center',
-            render: (row) => <span className="text-[#0088FF] font-medium whitespace-nowrap">{row.date}</span>,
+            render: (row) => <span className="text-[#0088FF] font-medium whitespace-nowrap">{formatDate(row.ngay_tao)}</span>,
         },
         {
             key: 'action',
@@ -151,12 +189,28 @@ export default function AccountsPage() {
             render: (row) => (
                 <div className="flex items-center justify-center gap-2">
                     <ViewButton href={`/admin/accounts/${row.id}`} />
-                    {row.status === 'Hoạt động' && (
+                    {row.loai_tai_khoan !== 'admin' && row.trang_thai === 'hoat_dong' && (
                         <button
-                            onClick={() => openLockModal(row.id)}
+                            onClick={() => {
+                                setSelectedAccountId(row.id);
+                                setSelectedReason('');
+                                setCustomReason('');
+                                setShowLockModal(true);
+                            }}
                             className="px-4 py-1.5 rounded-md bg-red-500 hover:bg-red-600 text-white text-xs font-medium transition-colors cursor-pointer"
                         >
                             Khóa
+                        </button>
+                    )}
+                    {row.loai_tai_khoan !== 'admin' && row.trang_thai === 'bi_khoa' && (
+                        <button
+                            onClick={() => {
+                                setSelectedAccountId(row.id);
+                                setShowUnlockModal(true);
+                            }}
+                            className="px-4 py-1.5 rounded-md bg-green-500 hover:bg-green-600 text-white text-xs font-medium transition-colors cursor-pointer"
+                        >
+                            Mở khóa
                         </button>
                     )}
                 </div>
@@ -168,15 +222,13 @@ export default function AccountsPage() {
         <div className="p-6 space-y-5">
             <h1 className="text-xl font-bold text-black tracking-wide">QUẢN LÝ TÀI KHOẢN</h1>
 
-            {/* Filter Row - all on same line */}
             <div className="flex flex-wrap items-center gap-3">
                 <div className="flex-1" />
 
-                {/* Tìm kiếm */}
                 <div className="relative w-64">
                     <input
                         type="text"
-                        placeholder="Tìm kiếm tên, email, ID"
+                        placeholder="Tìm kiếm tên, email"
                         value={searchQuery}
                         onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                         className="w-full bg-white border border-gray-200 rounded-full pl-4 pr-10 py-2.5 text-sm outline-none focus:border-green-500 transition-colors shadow-sm"
@@ -186,7 +238,6 @@ export default function AccountsPage() {
                     </svg>
                 </div>
 
-                {/* Loại tài khoản dropdown */}
                 <div className="relative">
                     <select
                         value={selectedType}
@@ -202,7 +253,6 @@ export default function AccountsPage() {
                     </svg>
                 </div>
 
-                {/* Trạng thái dropdown */}
                 <div className="relative">
                     <select
                         value={selectedStatus}
@@ -219,21 +269,25 @@ export default function AccountsPage() {
                 </div>
             </div>
 
-            {/* Table + Pagination */}
-            <AdminTable
-                columns={columns}
-                data={paginatedAccounts}
-                rowKey={(row, i) => `${row.id}-${i}`}
-                emptyMessage="Không có tài khoản nào phù hợp."
-            >
-                <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                />
-            </AdminTable>
+            {loading ? (
+                <div className="flex justify-center py-20">
+                    <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+            ) : (
+                <AdminTable
+                    columns={columns}
+                    data={accounts}
+                    rowKey={(row) => String(row.id)}
+                    emptyMessage="Không có tài khoản nào phù hợp."
+                >
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                    />
+                </AdminTable>
+            )}
 
-            {/* Lock Reason Modal */}
             {showLockModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5 mx-4">
@@ -242,21 +296,46 @@ export default function AccountsPage() {
                             {lockReasons.map((reason) => (
                                 <label
                                     key={reason}
-                                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedReason === reason ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                                        }`}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedReason === reason ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
                                 >
                                     <input type="radio" name="lockReason" value={reason} checked={selectedReason === reason} onChange={() => setSelectedReason(reason)} className="w-4 h-4 accent-red-600" />
                                     <span className="text-sm text-black">{reason}</span>
                                 </label>
                             ))}
+                            {selectedReason === OTHER_LOCK_REASON && (
+                                <textarea
+                                    value={customReason}
+                                    onChange={(event) => setCustomReason(event.target.value)}
+                                    placeholder="Nhập lý do khóa tài khoản"
+                                    rows={3}
+                                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none transition-colors focus:border-red-400"
+                                />
+                            )}
                         </div>
                         <div className="flex gap-3 pt-2">
-                            <button onClick={() => { setShowLockModal(false); setSelectedReason(''); setSelectedAccountId(''); }} className="flex-1 px-5 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">Hủy</button>
+                            <button onClick={() => { setShowLockModal(false); setSelectedReason(''); setCustomReason(''); setSelectedAccountId(null); }} className="flex-1 px-5 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">Hủy</button>
                             <button
                                 onClick={handleConfirmLock}
-                                className={`flex-1 px-5 py-3 rounded-xl text-sm font-bold text-white transition-colors cursor-pointer ${selectedReason ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-300 cursor-not-allowed'}`}
-                                disabled={!selectedReason}
-                            >Khóa</button>
+                                className={`flex-1 px-5 py-3 rounded-xl text-sm font-bold text-white transition-colors cursor-pointer ${finalReason && !actionLoading ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-300 cursor-not-allowed'}`}
+                                disabled={!finalReason || actionLoading}
+                            >{actionLoading ? 'Đang xử lý...' : 'Khóa'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showUnlockModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5 mx-4">
+                        <h3 className="text-lg font-bold text-black">Xác nhận mở khóa tài khoản</h3>
+                        <p className="text-sm text-gray-600">Bạn có chắc muốn mở khóa tài khoản này? Người dùng sẽ có thể đăng nhập và sử dụng hệ thống bình thường.</p>
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => { setShowUnlockModal(false); setSelectedAccountId(null); }} className="flex-1 px-5 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">Hủy</button>
+                            <button
+                                onClick={handleConfirmUnlock}
+                                className={`flex-1 px-5 py-3 rounded-xl text-sm font-bold text-white transition-colors cursor-pointer ${!actionLoading ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300 cursor-not-allowed'}`}
+                                disabled={actionLoading}
+                            >{actionLoading ? 'Đang xử lý...' : 'Mở khóa'}</button>
                         </div>
                     </div>
                 </div>

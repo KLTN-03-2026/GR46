@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useAuth } from '@/shared/AuthContext';
 
 const menuItems = [
     { label: 'Thống kê', href: '/admin', icon: 'chart' },
@@ -59,10 +61,26 @@ const icons: Record<string, React.ReactNode> = {
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const { dangXuat } = useAuth();
+    const [dangXuatDangXuLy, setDangXuatDangXuLy] = useState(false);
 
     const isActive = (href: string) => {
         if (href === '/admin') return pathname === '/admin';
         return pathname.startsWith(href);
+    };
+
+    const handleDangXuat = async () => {
+        if (dangXuatDangXuLy) return;
+
+        setDangXuatDangXuLy(true);
+        try {
+            await dangXuat();
+            router.push('/login');
+            router.refresh();
+        } finally {
+            setDangXuatDangXuLy(false);
+        }
     };
 
     return (
@@ -91,15 +109,17 @@ export default function Sidebar() {
 
             {/* Logout */}
             <div className="p-3 border-t border-gray-100">
-                <Link
-                    href="/login"
+                <button
+                    type="button"
+                    onClick={handleDangXuat}
+                    disabled={dangXuatDangXuLy}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-all duration-200"
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16,17 21,12 16,7" /><line x1="21" x2="9" y1="12" y2="12" />
                     </svg>
-                    Đăng xuất
-                </Link>
+                    {dangXuatDangXuLy ? 'Đang đăng xuất...' : 'Đăng xuất'}
+                </button>
             </div>
         </aside>
     );
