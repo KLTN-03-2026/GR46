@@ -142,7 +142,7 @@ npm run dev
 
 ## 7. Cấu trúc thư mục
 
-```bash
+```bash id="dishnet-short-structure"
 DISHNET/
 │
 ├── Backend/
@@ -159,6 +159,7 @@ DISHNET/
 │   └── src/
 │
 └── README.md
+```
 
 ---
 
