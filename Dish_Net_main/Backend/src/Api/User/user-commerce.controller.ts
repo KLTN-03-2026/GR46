@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,8 +9,14 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { existsSync, mkdirSync } from 'fs';
+import { extname, join } from 'path';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
@@ -93,6 +100,75 @@ export class UserCommerceController {
     @Body() dto: DangKyMoCuaHangDto,
   ) {
     return this.userCommerceService.taoYeuCauMoCuaHang(req.user!.sub, dto);
+  }
+
+  @Post('che-do-chuyen-nghiep/mo-cua-hang/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req: any, _file: any, cb: any) => {
+          const loaiRaw = String(req.query?.loai ?? '').trim().toLowerCase();
+          const loai = ['cccd', 'menu', 'payment'].includes(loaiRaw)
+            ? loaiRaw
+            : 'others';
+          const uploadDir = join(
+            process.cwd(),
+            'uploads',
+            'store-registration',
+            loai,
+          );
+          if (!existsSync(uploadDir)) {
+            mkdirSync(uploadDir, { recursive: true });
+          }
+          cb(null, uploadDir);
+        },
+        filename: (req: any, file: any, cb: any) => {
+          const loaiRaw = String(req.query?.loai ?? '').trim().toLowerCase();
+          const loai = ['cccd', 'menu', 'payment'].includes(loaiRaw)
+            ? loaiRaw
+            : 'attachment';
+          const ext = extname(file.originalname || '').toLowerCase() || '.jpg';
+          const safeExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)
+            ? ext
+            : '.jpg';
+          cb(
+            null,
+            `${loai}-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
+          );
+        },
+      }),
+      fileFilter: (_req: any, file: any, cb: any) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          cb(new BadRequestException('Chỉ hỗ trợ file ảnh'), false);
+          return;
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadAnhMoCuaHang(
+    @Req() req: any,
+    @Query('loai') loai?: string,
+    @UploadedFile() file?: any,
+  ) {
+    const loaiHopLe = ['cccd', 'menu', 'payment'];
+    const normalizedLoai = String(loai ?? '').trim().toLowerCase();
+
+    if (!loaiHopLe.includes(normalizedLoai)) {
+      throw new BadRequestException(
+        'Loại tệp không hợp lệ. Chỉ chấp nhận: cccd, menu, payment',
+      );
+    }
+    if (!file) {
+      throw new BadRequestException('Thiếu file ảnh tải lên');
+    }
+
+    const host = req.get('host') ?? '127.0.0.1:3009';
+    const protocol = req.protocol ?? 'http';
+    const url = `${protocol}://${host}/uploads/store-registration/${normalizedLoai}/${file.filename}`;
+
+    return { url };
   }
 
   // PB17 - Giỏ hàng

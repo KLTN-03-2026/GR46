@@ -133,6 +133,41 @@ export const userCommerceApi = {
       body: JSON.stringify(body),
     }),
 
+  uploadTepMoCuaHang: async (
+    file: File,
+    loai: 'cccd' | 'menu' | 'payment',
+  ) => {
+    const path = `${API_BASE}/user/che-do-chuyen-nghiep/mo-cua-hang/upload?loai=${encodeURIComponent(loai)}`;
+    const requestUrl =
+      typeof window === 'undefined'
+        ? new URL(
+            path,
+            process.env.NEXT_PUBLIC_APP_ORIGIN ?? 'http://127.0.0.1:4000',
+          ).toString()
+        : path;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(requestUrl, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+
+    const body = await res.json().catch(() => null);
+    const payload = isApiEnvelope<{ url: string }>(body) ? body.data : body;
+
+    if (!res.ok || !payload?.url) {
+      const message = isApiEnvelope(body) ? body.message : body?.message;
+      throw new Error(
+        Array.isArray(message) ? message.join(', ') : message || 'Có lỗi xảy ra',
+      );
+    }
+
+    return payload as { url: string };
+  },
+
   layGioHang: () => request('/user/gio-hang'),
 
   themVaoGioHang: (body: {

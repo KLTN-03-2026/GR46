@@ -91,6 +91,8 @@ export interface ChiTietYeuCauResponse {
     ten_cua_hang: string | null;
     dia_chi_cua_hang: string | null;
     so_dien_thoai_lien_he: string | null;
+    so_dien_thoai_chu_so_huu: string | null;
+    dia_chi_chu_so_huu: string | null;
     mo_ta_cua_hang: string | null;
   } | null;
   thong_tin_kiem_tien_noi_dung: {

@@ -1,17 +1,36 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
 import { useAuth } from '@/shared/AuthContext';
-import { emitUserCartRefreshEvent } from '@/shared/cartEvents';
+import { emitUserCartRefreshEvent, USER_CART_REFRESH_EVENT } from '@/shared/cartEvents';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
 import type { StoreDetailData } from './data';
 
 type MenuItem = StoreDetailData['menuItems'][number];
+type StoreCartSummaryItem = {
+    id: number;
+    name: string;
+    quantity: number;
+    thanhTien: number;
+};
+type CartApiItem = {
+    id?: number | string;
+    id_mon_an?: number | string;
+    so_luong?: number | string;
+    gia?: number | string;
+};
+type CartApiGroup = {
+    items?: CartApiItem[];
+};
+type SearchDishCandidate = {
+    id?: number | string;
+    ten_mon?: string;
+};
 
 type DishOption = {
     id: string;
@@ -234,7 +253,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const [selectedNoodle, setSelectedNoodle] = useState(NOODLE_OPTIONS[0].id);
     const [selectedPackaging, setSelectedPackaging] = useState(PACKAGING_OPTIONS[0].id);
     const [dishNote, setDishNote] = useState('');
-    const [cartItems, setCartItems] = useState<Record<string, number>>({});
+    const [cartSummary, setCartSummary] = useState<StoreCartSummaryItem[]>([]);
     const [cartActionMessage, setCartActionMessage] = useState<string | null>(null);
     const [cartActionError, setCartActionError] = useState<string | null>(null);
     const [isAddingToCart, setIsAddingToCart] = useState(false);
@@ -275,28 +294,64 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
             .filter((section) => section.items.length > 0);
     }, [activeMenuCategory, menuCategories, modalMenuItems, store.menuCategories]);
 
-    const cartSummary = useMemo(
-        () =>
-            Object.entries(cartItems)
-                .map(([id, quantity]) => {
-                    const item = store.menuItems.find((menuItem) => menuItem.id === id);
-                    if (!item || quantity <= 0) return null;
-                    const donGia = parseCurrency(item.price);
-                    return {
-                        ...item,
-                        quantity,
-                        donGia,
-                        thanhTien: donGia * quantity,
-                    };
-                })
-                .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-        [cartItems, store.menuItems],
-    );
+    const loadStoreCartSummary = useCallback(async () => {
+        if (!dangNhap) {
+            setCartSummary([]);
+            return;
+        }
+
+        try {
+            const payload = (await userCommerceApi.layGioHang()) as {
+                groups?: CartApiGroup[];
+            };
+            const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+            const menuMap = new Map(store.menuItems.map((item) => [String(item.id), item]));
+
+            const mapped = groups
+                .flatMap((group) =>
+                    (Array.isArray(group?.items) ? group.items : []).map((item) => {
+                        const monAnId = String(item?.id_mon_an ?? '');
+                        const menuItem = menuMap.get(monAnId);
+                        if (!menuItem) return null;
+
+                        const soLuong = Number(item?.so_luong ?? 0);
+                        const donGia = Number(item?.gia ?? parseCurrency(menuItem.price));
+                        return {
+                            id: Number(monAnId || String(item?.id ?? 0)),
+                            name: menuItem.name,
+                            quantity: soLuong,
+                            thanhTien: donGia * soLuong,
+                        } satisfies StoreCartSummaryItem;
+                    }),
+                )
+                .filter(
+                    (entry): entry is StoreCartSummaryItem =>
+                        Boolean(entry) && entry.quantity > 0,
+                );
+
+            setCartSummary(mapped);
+        } catch {
+            setCartSummary([]);
+        }
+    }, [dangNhap, store.menuItems]);
 
     const cartTotal = useMemo(
         () => cartSummary.reduce((sum, item) => sum + item.thanhTien, 0),
         [cartSummary],
     );
+
+    useEffect(() => {
+        void loadStoreCartSummary();
+
+        const onRefresh = () => {
+            void loadStoreCartSummary();
+        };
+        window.addEventListener(USER_CART_REFRESH_EVENT, onRefresh);
+
+        return () => {
+            window.removeEventListener(USER_CART_REFRESH_EVENT, onRefresh);
+        };
+    }, [loadStoreCartSummary]);
 
     const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
     const selectedNoodlePrice =
@@ -322,9 +377,17 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
         });
 
         const raw = await response.json().catch(() => null);
-        const payload = raw?.data ?? raw;
+        const payload = ((raw as { data?: unknown } | null)?.data ?? raw) as
+            | {
+                  ket_qua?: {
+                      mon_an?: {
+                          du_lieu?: unknown;
+                      };
+                  };
+              }
+            | null;
         const rows = Array.isArray(payload?.ket_qua?.mon_an?.du_lieu)
-            ? payload.ket_qua.mon_an.du_lieu
+            ? (payload.ket_qua.mon_an.du_lieu as SearchDishCandidate[])
             : [];
         if (rows.length === 0) {
             return null;
@@ -332,14 +395,14 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
 
         const targetName = normalizeText(item.name);
         const exact = rows.find(
-            (candidate: any) =>
+            (candidate) =>
                 normalizeText(String(candidate?.ten_mon ?? '')) === targetName,
         );
         if (exact?.id != null) {
             return Number(exact.id);
         }
 
-        const partial = rows.find((candidate: any) =>
+        const partial = rows.find((candidate) =>
             normalizeText(String(candidate?.ten_mon ?? '')).includes(targetName),
         );
         if (partial?.id != null) {
@@ -374,11 +437,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                 so_luong: quantity,
                 ghi_chu: note?.trim() || undefined,
             });
-
-            setCartItems((current) => ({
-                ...current,
-                [item.id]: (current[item.id] ?? 0) + quantity,
-            }));
+            await loadStoreCartSummary();
             setCartActionMessage('Đã thêm món vào giỏ hàng');
             emitUserCartRefreshEvent();
             return true;
@@ -879,7 +938,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                         <>
                                             <div className="mt-4 space-y-3">
                                                 {cartSummary.map((item) => (
-                                                    <article key={item.id} className="rounded-[12px] border border-[#ececec] px-3 py-3">
+                                                    <article key={`${item.id}-${item.name}`} className="rounded-[12px] border border-[#ececec] px-3 py-3">
                                                         <p className="text-sm font-semibold text-[#1f2937]">{item.name}</p>
                                                         <p className="text-sm text-[#6b7280]">SL: {item.quantity}</p>
                                                         <p className="mt-1 text-base font-bold text-[#f59e0b]">{formatCurrency(item.thanhTien)}</p>

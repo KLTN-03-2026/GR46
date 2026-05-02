@@ -170,11 +170,11 @@ export default function OpenStoreFlow({
     const [termFee, setTermFee] = useState(false);
     const [termQuality, setTermQuality] = useState(false);
     const [cccdVerified, setCccdVerified] = useState(false);
+    const [cccdFiles, setCccdFiles] = useState<File[]>([]);
+    const [menuFiles, setMenuFiles] = useState<File[]>([]);
+    const [paymentProofFiles, setPaymentProofFiles] = useState<File[]>([]);
     const [menuImages, setMenuImages] = useState<string[]>([]);
-    const [menuImageNames, setMenuImageNames] = useState<string[]>([]);
     const [agreedContract, setAgreedContract] = useState(false);
-    const [cccdFileNames, setCccdFileNames] = useState<string[]>([]);
-    const [paymentProofNames, setPaymentProofNames] = useState<string[]>([]);
     const [formError, setFormError] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -200,11 +200,22 @@ export default function OpenStoreFlow({
     const handleMenuImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files) return;
-        const urls = Array.from(files).map((f) => URL.createObjectURL(f));
-        const names = Array.from(files).map((f) => f.name);
+        const selectedFiles = Array.from(files);
+        const urls = selectedFiles.map((f) => URL.createObjectURL(f));
+        setMenuFiles((prev) => [...prev, ...selectedFiles]);
         setMenuImages((prev) => [...prev, ...urls]);
-        setMenuImageNames((prev) => [...prev, ...names]);
     };
+
+    const uploadStoreFiles = async (
+        files: File[],
+        loai: 'cccd' | 'menu' | 'payment',
+    ): Promise<string[]> =>
+        Promise.all(
+            files.map(async (file) => {
+                const uploaded = await userCommerceApi.uploadTepMoCuaHang(file, loai);
+                return uploaded.url;
+            }),
+        );
 
     const todayStr = (() => {
         const d = new Date();
@@ -343,8 +354,9 @@ export default function OpenStoreFlow({
                             onChange={(event) => {
                                 const files = event.target.files;
                                 if (!files) return;
-                                setCccdVerified(files.length > 0);
-                                setCccdFileNames(Array.from(files).map((file) => file.name));
+                                const selectedFiles = Array.from(files);
+                                setCccdVerified(selectedFiles.length > 0);
+                                setCccdFiles(selectedFiles);
                             }}
                         />
                     </div>
@@ -407,12 +419,12 @@ export default function OpenStoreFlow({
                                 setFormError('Vui lòng xác nhận đầy đủ các điều khoản.');
                                 return;
                             }
-                            if (!cccdVerified || cccdFileNames.length < 2) {
+                            if (!cccdVerified || cccdFiles.length < 2) {
                                 setFormError('Vui lòng tải ảnh CCCD mặt trước và mặt sau.');
                                 return;
                             }
-                            if (menuImageNames.length === 0) {
-                                setFormError('Vui lòng tải lên ít nhất 1 ảnh menu hoặc món ăn.');
+                            if (menuFiles.length < 5) {
+                                setFormError('Vui lòng tải lên ít nhất 5 ảnh menu hoặc món ăn.');
                                 return;
                             }
                             setFormError(null);
@@ -683,9 +695,8 @@ export default function OpenStoreFlow({
                             onChange={(event) => {
                                 const files = event.target.files;
                                 if (!files) return;
-                                setPaymentProofNames(
-                                    Array.from(files).map((file) => file.name),
-                                );
+                                const selectedFiles = Array.from(files);
+                                setPaymentProofFiles(selectedFiles);
                             }}
                         />
                     </div>
@@ -695,15 +706,33 @@ export default function OpenStoreFlow({
                             type="button"
                             onClick={async () => {
                                 if (isSubmitting) return;
-                                if (paymentProofNames.length === 0) {
+                                if (paymentProofFiles.length === 0) {
                                     setSubmitError(
                                         'Vui lòng tải lên minh chứng thanh toán trước khi gửi.',
+                                    );
+                                    return;
+                                }
+                                if (cccdFiles.length < 2) {
+                                    setSubmitError(
+                                        'Vui lòng tải ảnh CCCD mặt trước và mặt sau.',
+                                    );
+                                    return;
+                                }
+                                if (menuFiles.length < 5) {
+                                    setSubmitError(
+                                        'Vui lòng tải lên ít nhất 5 ảnh menu hoặc món ăn.',
                                     );
                                     return;
                                 }
                                 setSubmitError(null);
                                 setIsSubmitting(true);
                                 try {
+                                    const [cccdUrls, menuUrls, paymentUrls] = await Promise.all([
+                                        uploadStoreFiles(cccdFiles, 'cccd'),
+                                        uploadStoreFiles(menuFiles, 'menu'),
+                                        uploadStoreFiles(paymentProofFiles, 'payment'),
+                                    ]);
+
                                     await userCommerceApi.dangKyMoCuaHang({
                                         chu_so_huu: ownerName.trim(),
                                         so_cccd: cccd.trim(),
@@ -716,24 +745,9 @@ export default function OpenStoreFlow({
                                         gio_dong_cua: hoursTo.trim(),
                                         dia_chi_kinh_doanh: businessAddress.trim(),
                                         dong_y_dieu_khoan: true,
-                                        anh_cccd: cccdFileNames.map(
-                                            (name) =>
-                                                `https://cdn.dishnet.local/cccd/${encodeURIComponent(
-                                                    name,
-                                                )}`,
-                                        ),
-                                        anh_menu: menuImageNames.map(
-                                            (name) =>
-                                                `https://cdn.dishnet.local/menu/${encodeURIComponent(
-                                                    name,
-                                                )}`,
-                                        ),
-                                        minh_chung_thanh_toan: paymentProofNames.map(
-                                            (name) =>
-                                                `https://cdn.dishnet.local/payment/${encodeURIComponent(
-                                                    name,
-                                                )}`,
-                                        ),
+                                        anh_cccd: cccdUrls,
+                                        anh_menu: menuUrls,
+                                        minh_chung_thanh_toan: paymentUrls,
                                     });
                                     setStep('pending');
                                 } catch (error) {

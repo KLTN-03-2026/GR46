@@ -253,6 +253,14 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                   <span className="font-medium text-black">{request.thong_tin_dang_ky_cua_hang.so_dien_thoai_lien_he || '—'}</span>
                 </div>
                 <div className="flex gap-3">
+                  <span className="w-40 shrink-0 text-gray-400">SĐT chủ sở hữu:</span>
+                  <span className="font-medium text-black">{request.thong_tin_dang_ky_cua_hang.so_dien_thoai_chu_so_huu || '—'}</span>
+                </div>
+                <div className="flex gap-3">
+                  <span className="w-40 shrink-0 text-gray-400">Địa chỉ chủ sở hữu:</span>
+                  <span className="font-medium text-black">{request.thong_tin_dang_ky_cua_hang.dia_chi_chu_so_huu || '—'}</span>
+                </div>
+                <div className="flex gap-3">
                   <span className="w-40 shrink-0 text-gray-400">Mô tả cửa hàng:</span>
                   <span className="font-medium text-black">{request.thong_tin_dang_ky_cua_hang.mo_ta_cua_hang || '—'}</span>
                 </div>

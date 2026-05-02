@@ -33,6 +33,12 @@ export class YeuCauNangCapEntity {
   @Column({ type: "varchar", length: 20, nullable: true })
   so_dien_thoai_lien_he: string | null;
 
+  @Column({ type: "varchar", length: 20, nullable: true })
+  so_dien_thoai_chu_so_huu: string | null;
+
+  @Column({ type: "text", nullable: true })
+  dia_chi_chu_so_huu: string | null;
+
   @Column({ type: "text", nullable: true })
   dia_chi_kinh_doanh: string | null;
 

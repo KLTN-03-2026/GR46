@@ -166,6 +166,8 @@ export class AdminReviewService {
               ten_cua_hang: yc.ten_cua_hang_de_xuat,
               dia_chi_cua_hang: yc.dia_chi_kinh_doanh,
               so_dien_thoai_lien_he: yc.so_dien_thoai_lien_he,
+              so_dien_thoai_chu_so_huu: yc.so_dien_thoai_chu_so_huu,
+              dia_chi_chu_so_huu: yc.dia_chi_chu_so_huu,
               mo_ta_cua_hang: yc.ly_do_yeu_cau,
             }
           : null,

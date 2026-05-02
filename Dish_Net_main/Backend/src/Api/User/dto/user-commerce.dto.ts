@@ -183,7 +183,7 @@ export class DangKyMoCuaHangDto {
   anh_cccd: string[];
 
   @IsArray()
-  @ArrayMinSize(1)
+  @ArrayMinSize(5)
   @IsUrl({}, { each: true })
   anh_menu: string[];
 
