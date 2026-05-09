@@ -9,6 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { hash, compare } from "bcrypt";
+import { randomBytes } from "crypto";
 import { NguoiDungEntity } from "./entities/nguoi-dung.entity";
 import { MaXacThucEntity } from "./entities/ma-xac-thuc.entity";
 import { PhienDangNhapEntity } from "./entities/phien-dang-nhap.entity";
@@ -20,11 +21,15 @@ import {
   DatLaiMatKhauDto,
   GuiLaiOtpDto,
   DoiMatKhauDto,
+  DangNhapGoogleDto,
 } from "./dto/auth.dto";
 import { EmailService } from "../../shared/email/email.service";
 
 @Injectable()
 export class AuthService {
+  private static readonly MAX_LOGIN_ATTEMPTS = 5;
+  private static readonly LOGIN_BLOCK_MINUTES = 15;
+  private static readonly OTP_EXPIRE_MINUTES = 2;
   constructor(
     @InjectRepository(NguoiDungEntity)
     private readonly nguoiDungRepo: Repository<NguoiDungEntity>,
@@ -39,7 +44,7 @@ export class AuthService {
   async dangKy(dto: DangKyDto) {
     if (dto.mat_khau !== dto.xac_nhan_mat_khau) {
       throw new BadRequestException(
-        "Mat khau va xac nhan mat khau khong trung khop",
+        "Mật khẩu và xác nhận mật khẩu không trùng khớp",
       );
     }
 
@@ -47,7 +52,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (emailTonTai) {
-      throw new ConflictException("Email da duoc su dung");
+      throw new ConflictException("Email đã được sử dụng");
     }
 
     if (dto.so_dien_thoai) {
@@ -55,7 +60,7 @@ export class AuthService {
         where: { so_dien_thoai: dto.so_dien_thoai },
       });
       if (sdtTonTai) {
-        throw new ConflictException("So dien thoai da duoc su dung");
+        throw new ConflictException("Số điện thoại đã được sử dụng");
       }
     }
 
@@ -79,7 +84,9 @@ export class AuthService {
     const savedUser = await this.nguoiDungRepo.save(nguoiDung);
 
     const maOtp = this.taoMaOtp();
-    const thoiGianHetHan = new Date(Date.now() + 60 * 60 * 1000);
+    const thoiGianHetHan = new Date(
+      Date.now() + AuthService.OTP_EXPIRE_MINUTES * 60 * 1000,
+    );
 
     await this.maXacThucRepo.save({
       id_nguoi_dung: savedUser.id,
@@ -94,7 +101,7 @@ export class AuthService {
     await this.emailService.guiOtpDangKy(dto.email, maOtp, dto.ten_hien_thi);
 
     return {
-      message: "Dang ky thanh cong. Vui long xac nhan OTP da gui ve email.",
+      message: "Đăng ký thành công. Vui lòng xác nhận OTP đã gửi về email.",
       email: dto.email,
       ten_dang_nhap: tenDangNhap,
     };
@@ -105,7 +112,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Email khong ton tai");
+      throw new NotFoundException("Email không tồn tại");
     }
 
     const otp = await this.timOtpHieuLuc(nguoiDung.id, "dang_ky", dto.ma_otp);
@@ -118,36 +125,44 @@ export class AuthService {
     otp.thoi_gian_xac_nhan = new Date();
     await this.maXacThucRepo.save(otp);
 
-    return { message: "Xac nhan dang ky thanh cong. Ban co the dang nhap." };
+    return { message: "Xác nhận đăng ký thành công. Bạn có thể đăng nhập." };
   }
 
   async dangNhap(dto: DangNhapDto, ip?: string, userAgent?: string) {
-    const nguoiDung = await this.nguoiDungRepo.findOne({
-      where: [{ email: dto.tai_khoan }, { ten_dang_nhap: dto.tai_khoan }],
-    });
+    const taiKhoan = dto.tai_khoan.trim();
+    const taiKhoanLower = taiKhoan.toLowerCase();
+    const nguoiDung = await this.nguoiDungRepo
+      .createQueryBuilder("nd")
+      .where("LOWER(nd.email) = :email", { email: taiKhoanLower })
+      .orWhere("nd.ten_dang_nhap = :username", { username: taiKhoan })
+      .getOne();
 
     if (!nguoiDung) {
       throw new UnauthorizedException(
-        "Ten dang nhap/ email hoac mat khau khong dung",
+        "Tên đăng nhập/email hoặc mật khẩu không đúng",
       );
     }
 
+    await this.kiemTraKhoaTamThoiDangNhap(nguoiDung);
+
     if (nguoiDung.trang_thai_tai_khoan === "bi_khoa") {
-      throw new UnauthorizedException("Tai khoan cua ban da bi khoa");
+      throw new UnauthorizedException("Tài khoản của bạn đã bị khóa");
     }
 
     if (nguoiDung.trang_thai_tai_khoan === "cho_xac_thuc") {
       throw new UnauthorizedException(
-        "Tai khoan chua duoc xac thuc. Vui long xac nhan OTP.",
+        "Tài khoản chưa được xác thực. Vui lòng xác nhận OTP.",
       );
     }
 
     const matKhauDung = await compare(dto.mat_khau, nguoiDung.mat_khau_bam);
     if (!matKhauDung) {
+      await this.ghiNhanDangNhapThatBai(nguoiDung);
       throw new UnauthorizedException(
-        "Ten dang nhap/ email hoac mat khau khong dung",
+        "Tên đăng nhập/email hoặc mật khẩu không đúng",
       );
     }
+    await this.resetTrangThaiDangNhapThatBai(nguoiDung);
 
     const danhSachVaiTro = this.layDanhSachVaiTro(nguoiDung);
 
@@ -156,7 +171,7 @@ export class AuthService {
         can_chon_vai_tro: true,
         email: nguoiDung.email,
         danh_sach_vai_tro: danhSachVaiTro,
-        message: "Vui long chon vai tro dang nhap",
+        message: "Vui lòng chọn vai trò đăng nhập",
       };
     }
 
@@ -173,20 +188,102 @@ export class AuthService {
   async dangNhapVoiVaiTro(
     email: string,
     vaiTro: string,
+    ghiNho = false,
     ip?: string,
     userAgent?: string,
   ) {
     const nguoiDung = await this.nguoiDungRepo.findOne({ where: { email } });
     if (!nguoiDung) {
-      throw new NotFoundException("Tai khoan khong ton tai");
+      throw new NotFoundException("Tài khoản không tồn tại");
     }
+    await this.kiemTraKhoaTamThoiDangNhap(nguoiDung);
 
     const danhSachVaiTro = this.layDanhSachVaiTro(nguoiDung);
     if (!danhSachVaiTro.includes(vaiTro)) {
-      throw new BadRequestException("Vai tro khong hop le");
+      throw new BadRequestException("Vai trò không hợp lệ");
     }
 
-    return this.taoPhienDangNhap(nguoiDung, vaiTro, false, ip, userAgent);
+    return this.taoPhienDangNhap(nguoiDung, vaiTro, ghiNho, ip, userAgent);
+  }
+
+  async dangNhapGoogle(
+    dto: DangNhapGoogleDto,
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.credential)}`,
+    );
+    const tokenInfo = (await response.json().catch(() => null)) as
+      | {
+          aud?: string;
+          email?: string;
+          email_verified?: string;
+          sub?: string;
+          name?: string;
+          picture?: string;
+        }
+      | null;
+
+    if (!response.ok || !tokenInfo?.email || !tokenInfo?.sub) {
+      throw new UnauthorizedException("Xác thực Google thất bại");
+    }
+
+    const expectedAud = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (expectedAud && tokenInfo.aud !== expectedAud) {
+      throw new UnauthorizedException("Google Client ID không khớp");
+    }
+    if (String(tokenInfo.email_verified ?? "false") !== "true") {
+      throw new UnauthorizedException("Email Google chưa được xác thực");
+    }
+
+    let nguoiDung = await this.nguoiDungRepo.findOne({
+      where: { email: tokenInfo.email.toLowerCase() },
+    });
+    if (!nguoiDung) {
+      const tenDangNhapCoSo = tokenInfo.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
+      const tenDangNhap =
+        `${tenDangNhapCoSo || "google_user"}_${Date.now().toString().slice(-6)}`.slice(0, 50);
+      const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
+      nguoiDung = await this.nguoiDungRepo.save(
+        this.nguoiDungRepo.create({
+          ten_dang_nhap: tenDangNhap,
+          email: tokenInfo.email.toLowerCase(),
+          so_dien_thoai: null,
+          mat_khau_bam: await hash(randomBytes(24).toString("hex"), saltRounds),
+          ten_hien_thi: tokenInfo.name?.trim() || tenDangNhap,
+          anh_dai_dien: tokenInfo.picture ?? null,
+          khu_vuc: null,
+          dia_chi: null,
+          trang_thai_tai_khoan: "hoat_dong",
+          nguon_dang_ky: "google",
+          ma_nguon_ngoai: tokenInfo.sub,
+          thoi_gian_xac_thuc_email: new Date(),
+        }),
+      );
+    } else {
+      if (!nguoiDung.ma_nguon_ngoai && tokenInfo.sub) {
+        nguoiDung.ma_nguon_ngoai = tokenInfo.sub;
+      }
+      if (!nguoiDung.anh_dai_dien && tokenInfo.picture) {
+        nguoiDung.anh_dai_dien = tokenInfo.picture;
+      }
+      if (!nguoiDung.thoi_gian_xac_thuc_email) {
+        nguoiDung.thoi_gian_xac_thuc_email = new Date();
+      }
+      await this.nguoiDungRepo.save(nguoiDung);
+    }
+
+    await this.kiemTraKhoaTamThoiDangNhap(nguoiDung);
+    const danhSachVaiTro = this.layDanhSachVaiTro(nguoiDung);
+    const vaiTro = nguoiDung.la_admin ? "admin" : danhSachVaiTro[0];
+    return this.taoPhienDangNhap(
+      nguoiDung,
+      vaiTro,
+      dto.luu_dang_nhap ?? false,
+      ip,
+      userAgent,
+    );
   }
 
   async quenMatKhau(dto: QuenMatKhauDto) {
@@ -207,7 +304,9 @@ export class AuthService {
     );
 
     const maOtp = this.taoMaOtp();
-    const thoiGianHetHan = new Date(Date.now() + 60 * 60 * 1000);
+    const thoiGianHetHan = new Date(
+      Date.now() + AuthService.OTP_EXPIRE_MINUTES * 60 * 1000,
+    );
 
     await this.maXacThucRepo.save({
       id_nguoi_dung: nguoiDung.id,
@@ -299,7 +398,9 @@ export class AuthService {
     );
 
     const maOtp = this.taoMaOtp();
-    const thoiGianHetHan = new Date(Date.now() + 60 * 60 * 1000);
+    const thoiGianHetHan = new Date(
+      Date.now() + AuthService.OTP_EXPIRE_MINUTES * 60 * 1000,
+    );
 
     await this.maXacThucRepo.save({
       id_nguoi_dung: nguoiDung.id,
@@ -484,5 +585,62 @@ export class AuthService {
         ten_dang_nhap: nguoiDung.ten_dang_nhap,
       },
     };
+  }
+
+  private parseFailedAttempts(nguoiDung: NguoiDungEntity) {
+    const lyDo = nguoiDung.ly_do_khoa_hien_tai ?? "";
+    const match = lyDo.match(/\[FAILED_LOGIN_ATTEMPTS:(\d+)\]/);
+    return match ? Number(match[1]) || 0 : 0;
+  }
+
+  private setFailedAttempts(nguoiDung: NguoiDungEntity, count: number) {
+    const cleanReason = (nguoiDung.ly_do_khoa_hien_tai ?? "")
+      .replace(/\[FAILED_LOGIN_ATTEMPTS:\d+\]/g, "")
+      .trim();
+    nguoiDung.ly_do_khoa_hien_tai = `${cleanReason} [FAILED_LOGIN_ATTEMPTS:${count}]`.trim();
+  }
+
+  private async ghiNhanDangNhapThatBai(nguoiDung: NguoiDungEntity) {
+    const attempts = this.parseFailedAttempts(nguoiDung) + 1;
+    this.setFailedAttempts(nguoiDung, attempts);
+    if (attempts >= AuthService.MAX_LOGIN_ATTEMPTS) {
+      nguoiDung.kieu_khoa_tai_khoan = "tam_thoi";
+      nguoiDung.thoi_gian_mo_khoa = new Date(
+        Date.now() + AuthService.LOGIN_BLOCK_MINUTES * 60 * 1000,
+      );
+    }
+    await this.nguoiDungRepo.save(nguoiDung);
+  }
+
+  private async resetTrangThaiDangNhapThatBai(nguoiDung: NguoiDungEntity) {
+    if (
+      !this.parseFailedAttempts(nguoiDung) &&
+      nguoiDung.kieu_khoa_tai_khoan !== "tam_thoi"
+    ) {
+      return;
+    }
+    nguoiDung.kieu_khoa_tai_khoan =
+      nguoiDung.kieu_khoa_tai_khoan === "tam_thoi"
+        ? null
+        : nguoiDung.kieu_khoa_tai_khoan;
+    nguoiDung.thoi_gian_mo_khoa =
+      nguoiDung.kieu_khoa_tai_khoan === null ? null : nguoiDung.thoi_gian_mo_khoa;
+    this.setFailedAttempts(nguoiDung, 0);
+    await this.nguoiDungRepo.save(nguoiDung);
+  }
+
+  private async kiemTraKhoaTamThoiDangNhap(nguoiDung: NguoiDungEntity) {
+    if (nguoiDung.kieu_khoa_tai_khoan !== "tam_thoi") return;
+    if (!nguoiDung.thoi_gian_mo_khoa) return;
+    if (nguoiDung.thoi_gian_mo_khoa.getTime() <= Date.now()) {
+      nguoiDung.kieu_khoa_tai_khoan = null;
+      nguoiDung.thoi_gian_mo_khoa = null;
+      this.setFailedAttempts(nguoiDung, 0);
+      await this.nguoiDungRepo.save(nguoiDung);
+      return;
+    }
+    throw new UnauthorizedException(
+      `Bạn đã nhập sai quá ${AuthService.MAX_LOGIN_ATTEMPTS} lần. Vui lòng thử lại sau ${AuthService.LOGIN_BLOCK_MINUTES} phút.`,
+    );
   }
 }

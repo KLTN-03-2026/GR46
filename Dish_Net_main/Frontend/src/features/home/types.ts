@@ -54,6 +54,8 @@ export interface FeedPost {
     shareCount: number;
     saveCount: number;
     isLiked: boolean;
+    dishLink?: string;
+    dishId?: number;
     sharedPost?: {
         id: string;
         author: string;

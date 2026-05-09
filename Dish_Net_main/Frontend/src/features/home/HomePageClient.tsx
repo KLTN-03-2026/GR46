@@ -2,16 +2,32 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '@/shared/AuthContext';
 import { userContentApi } from '@/shared/userContentApi';
+import { userCommerceApi } from '@/shared/userCommerceApi';
 
 import { homeUiAssets } from './assets';
 import CommentModal from './CommentModal';
-import { getBangTinPage, mapFeedPosts } from './data';
+import { mapFeedPosts } from './data';
 import type { FeedPost, HomePageData, RankingItem, RankingMode, SpotlightCard } from './types';
+
+const FEED_PAGE_SIZE = 10;
+
+type FeedCategoryFilter = 'tat_ca' | 'bai_viet' | 'video' | 'repost';
+type FeedCuisineFilter = 'tat_ca' | 'co_hinh_anh' | 'co_video' | 'chi_van_ban';
+type FeedTimeFilter = 'moi_nhat' | 'hom_nay' | 'hom_qua' | 'tuan_nay' | 'thang_nay';
+
+const FEED_CATEGORY_FILTERS: FeedCategoryFilter[] = ['tat_ca', 'bai_viet', 'video', 'repost'];
+const FEED_CUISINE_FILTERS: FeedCuisineFilter[] = ['tat_ca', 'co_hinh_anh', 'co_video', 'chi_van_ban'];
+const FEED_TIME_FILTERS: FeedTimeFilter[] = ['moi_nhat', 'hom_nay', 'hom_qua', 'tuan_nay', 'thang_nay'];
+
+function parseEnumParam<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
+    if (!value) return fallback;
+    return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
 
 const rankingColumnLabels: Record<RankingMode, { name: string; metric: string; popularity: string }> = {
     stores: {
@@ -35,6 +51,50 @@ function RankingRow({ item }: { item: RankingItem }) {
             <div className="truncate text-center text-[11px] text-[#5e625e] whitespace-nowrap">{item.popularity}</div>
         </div>
     );
+}
+
+function parseVietnameseDate(value: string): Date | null {
+    if (!value) return null;
+    const fromNative = new Date(value);
+    if (!Number.isNaN(fromNative.getTime())) return fromNative;
+
+    const ddmmyyyy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!ddmmyyyy) return null;
+    const day = Number(ddmmyyyy[1]);
+    const month = Number(ddmmyyyy[2]) - 1;
+    const year = Number(ddmmyyyy[3]);
+    const parsed = new Date(year, month, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDisplayDate(value: string) {
+    const parsed = parseVietnameseDate(value);
+    if (!parsed) return '';
+    return parsed.toLocaleDateString('vi-VN');
+}
+
+function hasVideoMedia(images: string[]) {
+    return images.some((url) => /\.(mp4|mov|avi|mkv|webm)(\?|#|$)/i.test(url));
+}
+
+function isSameDate(a: Date, b: Date) {
+    return (
+        a.getFullYear() === b.getFullYear() &&
+        a.getMonth() === b.getMonth() &&
+        a.getDate() === b.getDate()
+    );
+}
+
+function isInCurrentWeek(target: Date, now: Date) {
+    const day = now.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    return target >= startOfWeek && target < endOfWeek;
 }
 
 function SidebarStoreCard({
@@ -78,43 +138,35 @@ function SidebarStoreCard({
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenGallery();
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#f6faf4] px-4 py-2 text-sm font-semibold text-[#285e19] transition hover:bg-[#ebf5e8]"
-                    >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M4 7a2 2 0 0 1 2-2h3l1.5 2H18a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" />
-                            <circle cx="12" cy="13" r="3" />
-                        </svg>
-                        Ảnh
-                    </button>
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenComment();
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#fff3ea] px-4 py-2 text-sm font-semibold text-[#d56a1f] transition hover:bg-[#ffe8d8]"
-                    >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                        Bình luận
-                    </button>
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenDetail();
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#eef3ff] px-4 py-2 text-sm font-semibold text-[#1f6feb] transition hover:bg-[#e4ecff]"
-                    >
-                        Chi tiết
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onOpenGallery();
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full bg-[#f6faf4] px-4 py-2 text-sm font-semibold text-[#285e19] transition hover:bg-[#ebf5e8]"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M4 7a2 2 0 0 1 2-2h3l1.5 2H18a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" />
+                                <circle cx="12" cy="13" r="3" />
+                            </svg>
+                            Ảnh
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onOpenComment();
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full bg-[#fff3ea] px-4 py-2 text-sm font-semibold text-[#d56a1f] transition hover:bg-[#ffe8d8]"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                            </svg>
+                            Bình luận
+                        </button>
+                    </div>
                 </div>
             </div>
         </article>
@@ -125,11 +177,15 @@ function GalleryModal({
     isOpen,
     onClose,
     card,
+    onOrder,
 }: {
     isOpen: boolean;
     onClose: () => void;
     card: SpotlightCard | null;
+    onOrder: () => void;
 }) {
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+
     if (!isOpen || !card) return null;
 
     const galleryImages = card.galleryImages?.length ? card.galleryImages : [card.coverImage];
@@ -146,13 +202,13 @@ function GalleryModal({
     return (
         <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/55 px-4 py-6" onClick={onClose}>
             <div
-                className="relative flex h-[min(86vh,920px)] w-full max-w-[1500px] flex-col overflow-hidden rounded-[24px] bg-white px-10 pb-8 pt-10 shadow-[0_28px_90px_rgba(0,0,0,0.28)]"
+                className="relative flex h-[min(82vh,760px)] w-full max-w-[1120px] flex-col overflow-hidden rounded-[20px] bg-white px-8 pb-6 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.28)]"
                 onClick={(event) => event.stopPropagation()}
             >
                 <button
                     type="button"
                     onClick={onClose}
-                    className="absolute right-6 top-5 text-[48px] leading-none text-black transition hover:opacity-60"
+                    className="absolute right-4 top-3 z-20 rounded-full bg-white/95 px-2 text-[40px] leading-none text-black transition hover:opacity-60"
                     aria-label="Đóng thư viện ảnh"
                 >
                     ×
@@ -166,7 +222,8 @@ function GalleryModal({
 
                     <button
                         type="button"
-                        className="rounded-full border border-[#3ca53b] bg-[#e6f3e1] px-12 py-5 text-[24px] font-bold text-[#2a6b1d]"
+                        onClick={onOrder}
+                        className="mr-12 rounded-full border border-[#3ca53b] bg-[#e6f3e1] px-8 py-3 text-[20px] font-bold text-[#2a6b1d] transition hover:bg-[#d9eed3]"
                     >
                         Đặt món
                     </button>
@@ -195,12 +252,35 @@ function GalleryModal({
                                 key={`${card.id}-gallery-${index}`}
                                 src={image}
                                 alt={`${card.title} ${index + 1}`}
-                                className="h-[260px] w-full rounded-[6px] object-cover"
+                                className="h-[220px] w-full cursor-zoom-in rounded-[8px] object-cover"
+                                onClick={() => setPreviewImage(image)}
                             />
                         ))}
                     </div>
                 </div>
             </div>
+
+            {previewImage ? (
+                <div
+                    className="fixed inset-0 z-[66] flex items-center justify-center bg-black/80 px-4 py-6"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setPreviewImage(null)}
+                        className="absolute right-6 top-4 text-[42px] leading-none text-white"
+                        aria-label="Đóng xem ảnh"
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={previewImage}
+                        alt="Xem trước ảnh"
+                        className="max-h-[88vh] max-w-[92vw] rounded-[10px] object-contain"
+                        onClick={(event) => event.stopPropagation()}
+                    />
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -209,7 +289,6 @@ function FeedPostCard({
     post,
     onComment,
     onOrder,
-    onOpenMenu,
     onFollow,
     onLike,
     onShare,
@@ -220,7 +299,6 @@ function FeedPostCard({
     post: FeedPost;
     onComment: () => void;
     onOrder: () => void;
-    onOpenMenu: () => void;
     onFollow: () => void;
     onLike: () => void;
     onShare: () => void;
@@ -265,7 +343,7 @@ function FeedPostCard({
                                 TOP REVIEWER
                             </span>
                         </div>
-                        <p className="mt-1 text-sm text-[#727672]">{post.date}</p>
+                        <p className="mt-1 text-sm text-[#727672]">{formatDisplayDate(post.date)}</p>
                     </div>
                 </div>
 
@@ -302,7 +380,7 @@ function FeedPostCard({
                             <div className="mt-4 rounded-[14px] bg-white px-4 py-4 shadow-[0_6px_18px_rgba(0,0,0,0.05)]">
                                 <div className="flex items-center justify-between gap-3">
                                     <p className="text-sm font-semibold text-black">{post.sharedPost.author}</p>
-                                    <p className="text-xs text-[#7a7a7a]">{post.sharedPost.date}</p>
+                                    <p className="text-xs text-[#7a7a7a]">{formatDisplayDate(post.sharedPost.date)}</p>
                                 </div>
                                 <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-[#404040]">{post.sharedPost.content}</p>
                                 {post.sharedPost.images.length > 0 ? (
@@ -337,6 +415,13 @@ function FeedPostCard({
                             ))}
                         </div>
                     ) : null}
+
+                    {post.dishLink ? (
+                        <div className="mt-4 rounded-[12px] border border-[#dbead5] bg-[#f5fbf2] px-4 py-3">
+                            <p className="text-sm font-semibold text-[#2a6b1d]">Link món</p>
+                            <p className="mt-1 line-clamp-1 text-sm text-[#285e19]">{post.dishLink}</p>
+                        </div>
+                    ) : null}
                 </>
             )}
 
@@ -355,8 +440,9 @@ function FeedPostCard({
                 ))}
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#d9ded7] pt-4">
-                <div className="flex items-center gap-8 text-sm font-bold text-[#6d6969]">
+            <div className="mt-6 border-t border-[#d9ded7] pt-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex flex-nowrap items-center gap-6 overflow-x-auto text-sm font-bold text-[#6d6969]">
                     <button onClick={(event) => { event.stopPropagation(); onLike(); }} className="inline-flex items-center gap-2 transition hover:text-[#285e19]">
                         <svg
                             viewBox="0 0 24 24"
@@ -392,39 +478,304 @@ function FeedPostCard({
                     <button onClick={(event) => { event.stopPropagation(); onReport(); }} className="inline-flex items-center gap-2 transition hover:text-[#c62828]">
                         Báo cáo
                     </button>
-                </div>
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <button
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenDetail();
-                        }}
-                        className="rounded-full border border-[#b7afaf] bg-white px-6 py-2 text-sm font-bold text-[#1f6feb] transition hover:border-[#1f6feb]"
-                    >
-                        Xem chi tiết
-                    </button>
-                    <button
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenMenu();
-                        }}
-                        className="rounded-full border border-[#b7afaf] bg-[#f7f6f6] px-6 py-2 text-sm font-bold text-[#285e19] transition hover:border-[#285e19]"
-                    >
-                        Xem menu
-                    </button>
-                    <button
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onOrder();
-                        }}
-                        className="rounded-full border border-[#258f22] bg-[#dcebdc] px-6 py-2 text-sm font-bold text-[#285e19] transition hover:bg-[#cae4ca]"
-                    >
-                        Đặt món
-                    </button>
+                    <div className="shrink-0">
+                        <button
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onOrder();
+                            }}
+                            className="rounded-full border border-[#258f22] bg-[#dcebdc] px-6 py-2 text-sm font-bold text-[#285e19] transition hover:bg-[#cae4ca]"
+                        >
+                            Đặt món
+                        </button>
+                    </div>
                 </div>
             </div>
         </article>
+    );
+}
+
+type ShareRecipient = {
+    idCuocTroChuyen: number;
+    idNguoiDung: number;
+    tenHienThi: string;
+    anhDaiDien: string | null;
+};
+
+function SharePostModal({
+    isOpen,
+    post,
+    recipients,
+    selectedRecipientIds,
+    shareText,
+    audience,
+    isLoadingRecipients,
+    isSubmitting,
+    onClose,
+    onToggleRecipient,
+    onChangeText,
+    onChangeAudience,
+    onShareNow,
+    onSendMessage,
+}: {
+    isOpen: boolean;
+    post: FeedPost | null;
+    recipients: ShareRecipient[];
+    selectedRecipientIds: number[];
+    shareText: string;
+    audience: 'cong_khai' | 'ban_be';
+    isLoadingRecipients: boolean;
+    isSubmitting: boolean;
+    onClose: () => void;
+    onToggleRecipient: (id: number) => void;
+    onChangeText: (value: string) => void;
+    onChangeAudience: (value: 'cong_khai' | 'ban_be') => void;
+    onShareNow: () => void;
+    onSendMessage: () => void;
+}) {
+    if (!isOpen || !post) return null;
+
+    return (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/55 px-4 py-6" onClick={onClose}>
+            <div
+                className="w-full max-w-[680px] overflow-hidden rounded-[20px] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.25)]"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-center justify-between border-b border-[#e6e8e5] px-6 py-4">
+                    <h3 className="text-[30px] font-bold text-black">Chia sẻ</h3>
+                    <button type="button" onClick={onClose} className="text-[36px] leading-none text-[#666]">×</button>
+                </div>
+
+                <div className="space-y-4 px-6 py-5">
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-[#4b5563]">Chế độ chia sẻ:</span>
+                        <select
+                            value={audience}
+                            onChange={(event) => onChangeAudience(event.target.value === 'ban_be' ? 'ban_be' : 'cong_khai')}
+                            className="rounded-[10px] border border-[#d7ddd7] bg-white px-3 py-2 text-sm font-semibold text-[#1f2937] outline-none transition focus:border-[#2f8f22]"
+                        >
+                            <option value="cong_khai">Công khai</option>
+                            <option value="ban_be">Bạn bè</option>
+                        </select>
+                    </div>
+                    <p className="text-sm text-[#5f655f] line-clamp-2">{post.review || 'Bài viết từ bảng tin DishNet'}</p>
+                    <textarea
+                        value={shareText}
+                        onChange={(event) => onChangeText(event.target.value)}
+                        placeholder="Hãy nói gì đó về nội dung này..."
+                        className="h-24 w-full resize-none rounded-[12px] border border-[#d7ddd7] px-4 py-3 text-sm outline-none transition focus:border-[#2f8f22]"
+                    />
+                    <div className="flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onShareNow}
+                            disabled={isSubmitting}
+                            className="rounded-[10px] bg-[#1f6feb] px-6 py-2 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            Chia sẻ ngay
+                        </button>
+                    </div>
+                </div>
+
+                <div className="border-t border-[#e6e8e5] px-6 py-4">
+                    <p className="mb-3 text-lg font-semibold text-black">Gửi tới</p>
+                    {isLoadingRecipients ? (
+                        <p className="text-sm text-[#666]">Đang tải danh sách người nhận...</p>
+                    ) : recipients.length === 0 ? (
+                        <p className="text-sm text-[#666]">Chưa có cuộc trò chuyện nào để gửi.</p>
+                    ) : (
+                        <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                            {recipients.map((recipient) => {
+                                const isSelected = selectedRecipientIds.includes(recipient.idNguoiDung);
+                                return (
+                                    <button
+                                        type="button"
+                                        key={recipient.idNguoiDung}
+                                        onClick={() => onToggleRecipient(recipient.idNguoiDung)}
+                                        className={`flex w-full items-center gap-3 rounded-[12px] border px-3 py-2 text-left transition ${isSelected ? 'border-[#2f8f22] bg-[#eef7eb]' : 'border-[#e2e5e0] bg-white hover:bg-[#f8faf7]'}`}
+                                    >
+                                        <img
+                                            src={recipient.anhDaiDien || 'https://i.pravatar.cc/120'}
+                                            alt={recipient.tenHienThi}
+                                            className="h-10 w-10 rounded-full object-cover"
+                                        />
+                                        <span className="flex-1 truncate text-sm font-semibold text-black">{recipient.tenHienThi}</span>
+                                        <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${isSelected ? 'border-[#2f8f22] bg-[#2f8f22] text-white' : 'border-[#cfd5cf] text-transparent'}`}>
+                                            ✓
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={onSendMessage}
+                            disabled={isSubmitting || selectedRecipientIds.length === 0}
+                            className="rounded-[10px] bg-[#258f22] px-6 py-2 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            Gửi qua tin nhắn
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const REPORT_REASONS: Array<{ value: string; label: string; detail?: string }> = [
+    { value: 'duoi_18_tuoi', label: 'Vấn đề liên quan đến người dưới 18 tuổi' },
+    { value: 'bat_nat_quay_roi', label: 'Bắt nạt, quấy rối hoặc lăng mạ/lạm dụng/ngược đãi' },
+    { value: 'tu_tu_tu_hai', label: 'Tự tử hoặc tự hại bản thân' },
+    { value: 'bao_luc_thu_ghet', label: 'Nội dung mang tính bạo lực, thù ghét hoặc gây phiền toái' },
+    { value: 'hang_hoa_han_che', label: 'Bán hoặc quảng bá mặt hàng bị hạn chế' },
+    { value: 'noi_dung_nguoi_lon', label: 'Nội dung người lớn' },
+    { value: 'thong_tin_sai_su_that', label: 'Thông tin sai sự thật, lừa đảo hoặc gian lận' },
+    { value: 'so_huu_tri_tue', label: 'Quyền sở hữu trí tuệ' },
+    { value: 'khong_muon_xem', label: 'Tôi không muốn xem nội dung này' },
+];
+
+function ReportPostModal({
+    isOpen,
+    isSubmitting,
+    onClose,
+    onPickReason,
+}: {
+    isOpen: boolean;
+    isSubmitting: boolean;
+    onClose: () => void;
+    onPickReason: (reason: { value: string; label: string }) => void;
+}) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4 py-6" onClick={onClose}>
+            <div
+                className="w-full max-w-[760px] overflow-hidden rounded-[18px] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.24)]"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-center justify-between border-b border-[#e5e7eb] px-5 py-4">
+                    <h3 className="text-[42px] font-bold text-black">Báo cáo</h3>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-[#eef1f5] text-[34px] leading-none text-[#59606b]"
+                        aria-label="Đóng popup báo cáo"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div className="border-b border-[#eceff1] px-6 py-5">
+                    <p className="text-[18px] font-semibold text-[#111827]">Tại sao bạn báo cáo bài viết này?</p>
+                    <p className="mt-2 text-[15px] leading-7 text-[#6b7280]">
+                        Nếu bạn nhận thấy ai đó đang gặp nguy hiểm, đừng chần chừ mà hãy tìm ngay sự giúp đỡ trước khi báo cáo với DishNet.
+                    </p>
+                </div>
+
+                <div className="max-h-[56vh] overflow-y-auto px-2 py-2">
+                    {REPORT_REASONS.map((reason) => (
+                        <button
+                            key={reason.value}
+                            type="button"
+                            onClick={() => onPickReason(reason)}
+                            disabled={isSubmitting}
+                            className="w-full border-b border-[#f1f3f5] px-5 py-4 text-left transition hover:bg-[#f8fafc] disabled:cursor-not-allowed"
+                        >
+                            <p className="text-[17px] font-semibold text-[#111827]">{reason.label}</p>
+                            {reason.detail ? <p className="mt-1 text-[14px] text-[#6b7280]">{reason.detail}</p> : null}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ReportDoneModal({
+    isOpen,
+    authorName,
+    onClose,
+}: {
+    isOpen: boolean;
+    authorName: string;
+    onClose: () => void;
+}) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[96] flex items-center justify-center bg-black/50 px-4 py-6" onClick={onClose}>
+            <div
+                className="w-full max-w-[660px] overflow-hidden rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.22)]"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="px-6 py-6 text-center">
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#e8f5e9] text-[#2f8f22]">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="m5 12 4 4 10-10" />
+                        </svg>
+                    </div>
+                    <p className="text-[34px] font-bold leading-tight text-[#111827]">Cảm ơn bạn đã cho chúng tôi biết.</p>
+                    <p className="mx-auto mt-2 max-w-[560px] text-[15px] leading-7 text-[#6b7280]">
+                        Chúng tôi sử dụng ý kiến đóng góp của bạn để giúp hệ thống biết được khi có nội dung vi phạm.
+                    </p>
+                </div>
+
+                <div className="border-t border-[#eceff1] px-6 py-5">
+                    <p className="mb-4 text-[20px] font-bold text-[#111827]">Các bước khác mà bạn có thể thực hiện</p>
+                    <div className="space-y-4">
+                        <div className="flex items-start gap-3 rounded-[10px] px-1 py-1">
+                            <span className="mt-1 text-[#111827]">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="8" r="4" />
+                                    <path d="M4 20c1.8-3.1 4.6-4.6 8-4.6s6.2 1.5 8 4.6" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-[18px] font-semibold text-[#111827]">Chặn {authorName}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[10px] px-1 py-1">
+                            <span className="mt-1 text-[#111827]">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 9v4" />
+                                    <path d="M12 17h.01" />
+                                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-[18px] font-semibold text-[#111827]">Báo cáo với quản trị viên</p>
+                                <p className="text-[14px] text-[#6b7280]">Thông báo cho quản trị viên về bài viết này.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[10px] px-1 py-1">
+                            <span className="mt-1 text-[#111827]">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="3" />
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-[18px] font-semibold text-[#111827]">Tùy chọn nội dung</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="border-t border-[#eceff1] px-6 py-4">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="w-full rounded-[10px] bg-[#1f6feb] py-2.5 text-[22px] font-bold text-white transition hover:opacity-90"
+                    >
+                        Xong
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -464,6 +815,19 @@ function PostDetailModal({
                 const data = (payload ?? {}) as Record<string, unknown>;
                 const authorInfo = (data.thong_tin_nguoi_dang ?? {}) as Record<string, unknown>;
                 const storeInfo = data.cua_hang as Record<string, unknown> | null;
+                const extractMediaUrls = (input: unknown): string[] => {
+                    if (!Array.isArray(input)) return [];
+                    return input
+                        .map((item) => {
+                            if (typeof item === 'string') return item;
+                            if (item && typeof item === 'object' && 'url' in item) {
+                                const value = (item as { url?: unknown }).url;
+                                return typeof value === 'string' ? value : '';
+                            }
+                            return '';
+                        })
+                        .filter(Boolean);
+                };
                 setDetail({
                     id: Number(data.id ?? postId),
                     loai_bai_viet: String(data.loai_bai_viet ?? ''),
@@ -477,9 +841,7 @@ function PostDetailModal({
                     cua_hang: storeInfo
                         ? { ten_cua_hang: String(storeInfo.ten_cua_hang ?? 'Cửa hàng') }
                         : null,
-                    tep_dinh_kem: Array.isArray(data.tep_dinh_kem)
-                        ? data.tep_dinh_kem.filter((item): item is string => typeof item === 'string')
-                        : [],
+                    tep_dinh_kem: extractMediaUrls(data.tep_dinh_kem),
                     bai_viet_goc: data.bai_viet_goc
                         ? {
                             id: Number((data.bai_viet_goc as Record<string, unknown>).id ?? 0),
@@ -489,9 +851,7 @@ function PostDetailModal({
                                 ten_hien_thi: String(((data.bai_viet_goc as Record<string, unknown>).thong_tin_nguoi_dang as Record<string, unknown> | undefined)?.ten_hien_thi ?? 'Người dùng'),
                                 anh_dai_dien: ((((data.bai_viet_goc as Record<string, unknown>).thong_tin_nguoi_dang as Record<string, unknown> | undefined)?.anh_dai_dien as string | null) ?? null),
                             },
-                            tep_dinh_kem: Array.isArray((data.bai_viet_goc as Record<string, unknown>).tep_dinh_kem)
-                                ? ((data.bai_viet_goc as Record<string, unknown>).tep_dinh_kem as unknown[]).filter((item): item is string => typeof item === 'string')
-                                : [],
+                            tep_dinh_kem: extractMediaUrls((data.bai_viet_goc as Record<string, unknown>).tep_dinh_kem),
                         }
                         : null,
                 });
@@ -606,6 +966,8 @@ function DealDetailModal({
 
 export default function HomePageClient({ data }: { data: HomePageData }) {
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [rankingMode, setRankingMode] = useState<RankingMode>('stores');
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
@@ -619,17 +981,38 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
     const [visibleDealCount, setVisibleDealCount] = useState(3);
     const [activePostDetailId, setActivePostDetailId] = useState<number | null>(null);
     const [feedPosts, setFeedPosts] = useState<FeedPost[]>(data.feedPosts);
-    const [feedPage, setFeedPage] = useState<number>(Number(data.feedPagination?.trang ?? 1));
-    const [totalFeedPages, setTotalFeedPages] = useState<number>(Number(data.feedPagination?.tong_trang ?? 1));
-    const [isLoadingMorePosts, setIsLoadingMorePosts] = useState(false);
+    const [feedCurrentPage, setFeedCurrentPage] = useState(() => {
+        const page = Number(searchParams.get('page') ?? '1');
+        return Number.isFinite(page) && page > 0 ? page : 1;
+    });
+    const [categoryFilter, setCategoryFilter] = useState<FeedCategoryFilter>(() =>
+        parseEnumParam(searchParams.get('category'), FEED_CATEGORY_FILTERS, 'tat_ca'),
+    );
+    const [cuisineFilter, setCuisineFilter] = useState<FeedCuisineFilter>(() =>
+        parseEnumParam(searchParams.get('cuisine'), FEED_CUISINE_FILTERS, 'tat_ca'),
+    );
+    const [timeFilter, setTimeFilter] = useState<FeedTimeFilter>(() =>
+        parseEnumParam(searchParams.get('time'), FEED_TIME_FILTERS, 'moi_nhat'),
+    );
     const [activeMenuCategory, setActiveMenuCategory] = useState(data.menu.categories[0]?.id ?? '');
     const [menuQuery, setMenuQuery] = useState('');
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [spotlightCards] = useState<SpotlightCard[]>(data.spotlightCards);
     const [menuData] = useState(data.menu);
-    const feedLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const dealSectionRef = useRef<HTMLElement | null>(null);
-    const { dangNhap: isAuthenticated } = useAuth();
+    const { dangNhap: isAuthenticated, nguoiDung } = useAuth();
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [shareTargetPost, setShareTargetPost] = useState<FeedPost | null>(null);
+    const [shareText, setShareText] = useState('');
+    const [shareAudience, setShareAudience] = useState<'cong_khai' | 'ban_be'>('cong_khai');
+    const [shareRecipients, setShareRecipients] = useState<ShareRecipient[]>([]);
+    const [selectedRecipientIds, setSelectedRecipientIds] = useState<number[]>([]);
+    const [isLoadingShareRecipients, setIsLoadingShareRecipients] = useState(false);
+    const [isSubmittingShare, setIsSubmittingShare] = useState(false);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isReportDoneModalOpen, setIsReportDoneModalOpen] = useState(false);
+    const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+    const [reportTargetPost, setReportTargetPost] = useState<FeedPost | null>(null);
 
     const bumpPostCounter = useCallback(
         (
@@ -657,95 +1040,255 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
 
     const rankingItems = data.rankings[rankingMode];
     const rankingLabels = rankingColumnLabels[rankingMode];
-    const filteredMenuItems = menuData.items.filter((item) => {
-        const matchesCategory = !activeMenuCategory || item.categoryId === activeMenuCategory;
-        const matchesQuery = !menuQuery || item.name.toLowerCase().includes(menuQuery.toLowerCase());
-        return matchesCategory && matchesQuery;
-    });
-    const hasMorePosts = feedPage < totalFeedPages;
+    const normalizedMenuQuery = menuQuery.trim().toLowerCase();
+    const menuSearchResults = useMemo(() => {
+        if (!normalizedMenuQuery) return [];
+        return menuData.items.filter((item) =>
+            item.name.toLowerCase().includes(normalizedMenuQuery) ||
+            item.note.toLowerCase().includes(normalizedMenuQuery),
+        );
+    }, [menuData.items, normalizedMenuQuery]);
+    const filteredMenuItemsByCategory = useMemo(() => {
+        return menuData.items.filter((item) => !activeMenuCategory || item.categoryId === activeMenuCategory);
+    }, [activeMenuCategory, menuData.items]);
+    const filteredFeedPosts = useMemo(() => {
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+
+        const byCategory = feedPosts.filter((post) => {
+            if (categoryFilter === 'tat_ca') return true;
+            return post.type === categoryFilter;
+        });
+
+        const byCuisine = byCategory.filter((post) => {
+            if (cuisineFilter === 'tat_ca') return true;
+            if (cuisineFilter === 'co_video') return hasVideoMedia(post.images);
+            if (cuisineFilter === 'co_hinh_anh') return post.images.length > 0 && !hasVideoMedia(post.images);
+            return post.images.length === 0;
+        });
+
+        const byTime = byCuisine.filter((post) => {
+            if (timeFilter === 'moi_nhat') return true;
+            const date = parseVietnameseDate(post.date);
+            if (!date) return false;
+            if (timeFilter === 'hom_nay') return isSameDate(date, now);
+            if (timeFilter === 'hom_qua') return isSameDate(date, yesterday);
+            if (timeFilter === 'tuan_nay') return isInCurrentWeek(date, now);
+            return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        });
+
+        return [...byTime].sort((a, b) => {
+            const dateA = parseVietnameseDate(a.date)?.getTime() ?? 0;
+            const dateB = parseVietnameseDate(b.date)?.getTime() ?? 0;
+            return dateB - dateA;
+        });
+    }, [categoryFilter, cuisineFilter, feedPosts, timeFilter]);
+    const totalFeedPages = Math.max(1, Math.ceil(filteredFeedPosts.length / FEED_PAGE_SIZE));
+    const currentFeedPage = Math.min(feedCurrentPage, totalFeedPages);
+    const paginatedFeedPosts = useMemo(() => {
+        const start = (currentFeedPage - 1) * FEED_PAGE_SIZE;
+        return filteredFeedPosts.slice(start, start + FEED_PAGE_SIZE);
+    }, [currentFeedPage, filteredFeedPosts]);
     const hasMoreDeals = spotlightCards.length > visibleDealCount;
 
-    const loadMorePosts = useCallback(async () => {
-        if (isLoadingMorePosts || !hasMorePosts) return;
-        setIsLoadingMorePosts(true);
+    const closeShareModal = useCallback(() => {
+        setIsShareModalOpen(false);
+        setShareTargetPost(null);
+        setShareText('');
+        setShareAudience('cong_khai');
+        setSelectedRecipientIds([]);
+    }, []);
+
+    const loadShareRecipients = useCallback(async () => {
+        setIsLoadingShareRecipients(true);
         try {
-            const nextPage = feedPage + 1;
-            const result = await getBangTinPage(nextPage, Number(data.feedPagination?.so_luong ?? 12));
-            const nextPosts: FeedPost[] = result.feedPosts;
-            setFeedPosts((current) => {
-                const existingIds = new Set(current.map((item) => item.id));
-                const merged = [...current];
-                nextPosts.forEach((post) => {
-                    if (!existingIds.has(post.id)) {
-                        merged.push(post);
-                    }
-                });
-                return merged;
-            });
-            setFeedPage(nextPage);
-            setTotalFeedPages(
-                Number(result.feedPayload?.phan_trang_bai_viet?.tong_trang ?? totalFeedPages),
-            );
-        } catch (error) {
-            setActionMessage(
-                error instanceof Error
-                    ? error.message
-                    : 'Không tải thêm được bài viết',
-            );
-        } finally {
-            setIsLoadingMorePosts(false);
-        }
-    }, [data.feedPagination?.so_luong, feedPage, hasMorePosts, isLoadingMorePosts, totalFeedPages]);
-
-    useEffect(() => {
-        if (!hasMorePosts || !feedLoadMoreRef.current) return;
-        const target = feedLoadMoreRef.current;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries.some((entry) => entry.isIntersecting)) {
-                    void loadMorePosts();
-                }
-            },
-            { rootMargin: '180px 0px' },
-        );
-        observer.observe(target);
-        return () => observer.disconnect();
-    }, [hasMorePosts, loadMorePosts]);
-
-    useEffect(() => {
-        if (!isAuthenticated) return;
-        let active = true;
-        void userContentApi
-            .layBangTin({
+            const payload = (await userCommerceApi.layDanhSachTroChuyen({
                 trang: 1,
-                so_luong: Number(data.feedPagination?.so_luong ?? 12),
-            })
-            .then((payload: unknown) => {
+                so_luong: 50,
+            })) as { du_lieu?: Array<Record<string, unknown>> };
+            const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
+            const mapped: ShareRecipient[] = rows
+                .map((item) => {
+                    const partner = (item.doi_tac as Record<string, unknown> | undefined) ?? {};
+                    return {
+                        idCuocTroChuyen: Number(item.id_cuoc_tro_chuyen ?? 0),
+                        idNguoiDung: Number(partner.id ?? 0),
+                        tenHienThi: String(partner.ten_hien_thi ?? 'Người dùng'),
+                        anhDaiDien: typeof partner.anh_dai_dien === 'string' ? partner.anh_dai_dien : null,
+                    };
+                })
+                .filter((item) => item.idCuocTroChuyen > 0 && item.idNguoiDung > 0);
+            setShareRecipients(mapped);
+        } catch {
+            setShareRecipients([]);
+        } finally {
+            setIsLoadingShareRecipients(false);
+        }
+    }, []);
+
+    const openShareModal = useCallback((post: FeedPost) => {
+        setShareTargetPost(post);
+        setShareText('');
+        setShareAudience('cong_khai');
+        setSelectedRecipientIds([]);
+        setIsShareModalOpen(true);
+        void loadShareRecipients();
+    }, [loadShareRecipients]);
+
+    const toggleShareRecipient = useCallback((idNguoiDung: number) => {
+        setSelectedRecipientIds((current) =>
+            current.includes(idNguoiDung)
+                ? current.filter((id) => id !== idNguoiDung)
+                : [...current, idNguoiDung],
+        );
+    }, []);
+
+    const openReportModal = useCallback((post: FeedPost) => {
+        setReportTargetPost(post);
+        setIsReportDoneModalOpen(false);
+        setIsReportModalOpen(true);
+    }, []);
+
+    const closeReportModal = useCallback(() => {
+        if (isSubmittingReport) return;
+        setIsReportModalOpen(false);
+        setReportTargetPost(null);
+    }, [isSubmittingReport]);
+
+    const closeReportDoneModal = useCallback(() => {
+        setIsReportDoneModalOpen(false);
+        setReportTargetPost(null);
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        const syncFeed = async () => {
+            try {
+                const payload = (await userContentApi.layBangTin({
+                    trang: 1,
+                    so_luong: 100,
+                })) as Record<string, unknown>;
                 if (!active) return;
-                const latest: FeedPost[] = mapFeedPosts(payload as Record<string, unknown>);
-                const latestById = new Map(latest.map((item) => [item.id, item]));
-                setFeedPosts((current) =>
-                    current.map((post) => {
-                        const synced = latestById.get(post.id);
-                        if (!synced) return post;
-                        return {
-                            ...post,
-                            isLiked: synced.isLiked,
-                            followLabel: synced.followLabel,
-                            likeCount: synced.likeCount,
-                            commentCount: synced.commentCount,
-                            shareCount: synced.shareCount,
-                        };
-                    }),
-                );
-            })
-            .catch(() => {
+                const latest: FeedPost[] = mapFeedPosts(payload);
+                setFeedPosts(latest);
+                setFeedCurrentPage(1);
+            } catch {
                 // keep current UI state if sync fails
-            });
+            }
+        };
+
+        void syncFeed();
+        const onFocus = () => {
+            void syncFeed();
+        };
+        window.addEventListener('focus', onFocus);
+
         return () => {
             active = false;
+            window.removeEventListener('focus', onFocus);
         };
-    }, [data.feedPagination?.so_luong, isAuthenticated]);
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        setFeedCurrentPage(1);
+    }, [categoryFilter, cuisineFilter, timeFilter]);
+
+    useEffect(() => {
+        const urlCategory = parseEnumParam(searchParams.get('category'), FEED_CATEGORY_FILTERS, 'tat_ca');
+        const urlCuisine = parseEnumParam(searchParams.get('cuisine'), FEED_CUISINE_FILTERS, 'tat_ca');
+        const urlTime = parseEnumParam(searchParams.get('time'), FEED_TIME_FILTERS, 'moi_nhat');
+        const urlPageRaw = Number(searchParams.get('page') ?? '1');
+        const urlPage = Number.isFinite(urlPageRaw) && urlPageRaw > 0 ? urlPageRaw : 1;
+
+        if (urlCategory !== categoryFilter) setCategoryFilter(urlCategory);
+        if (urlCuisine !== cuisineFilter) setCuisineFilter(urlCuisine);
+        if (urlTime !== timeFilter) setTimeFilter(urlTime);
+        if (urlPage !== feedCurrentPage) setFeedCurrentPage(urlPage);
+    }, [searchParams]);
+
+    useEffect(() => {
+        const postId = Number(searchParams.get('post_id') ?? 0);
+        if (!Number.isFinite(postId) || postId <= 0) return;
+        setActivePostDetailId(postId);
+    }, [searchParams]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('category', categoryFilter);
+        params.set('cuisine', cuisineFilter);
+        params.set('time', timeFilter);
+        params.set('page', String(currentFeedPage));
+        const nextUrl = `${pathname}?${params.toString()}`;
+        const currentUrl = `${pathname}?${searchParams.toString()}`;
+        if (nextUrl === currentUrl) return;
+        router.replace(nextUrl, { scroll: false });
+    }, [categoryFilter, cuisineFilter, timeFilter, currentFeedPage, pathname, router, searchParams]);
+
+    const handleShareNow = useCallback(async () => {
+        const postId = Number(shareTargetPost?.id ?? 0);
+        if (!Number.isFinite(postId) || postId <= 0 || isSubmittingShare) return;
+        setIsSubmittingShare(true);
+        try {
+            const res = (await userContentApi.chiaSeBaiViet(postId, {
+                muc_do_hien_thi: shareAudience,
+            })) as { tong_luot_chia_se?: number };
+            bumpPostCounter(postId, 'shareCount', res?.tong_luot_chia_se);
+            setActionMessage('Đã chia sẻ bài viết lên trang cá nhân');
+            closeShareModal();
+        } catch (error) {
+            setActionMessage(error instanceof Error ? error.message : 'Không thể chia sẻ bài viết');
+        } finally {
+            setIsSubmittingShare(false);
+        }
+    }, [bumpPostCounter, closeShareModal, isSubmittingShare, shareAudience, shareTargetPost?.id]);
+
+    const handleSendShareViaMessage = useCallback(async () => {
+        const postId = Number(shareTargetPost?.id ?? 0);
+        if (!Number.isFinite(postId) || postId <= 0 || selectedRecipientIds.length === 0 || isSubmittingShare) return;
+        setIsSubmittingShare(true);
+        try {
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            const postLink = `${origin}/?post=${postId}`;
+            const prefix = shareText.trim() ? `${shareText.trim()}\n` : '';
+            const senderName = nguoiDung?.ten_hien_thi?.trim() || 'Một người dùng';
+            const message = `${prefix}${senderName} đã chia sẻ một bài viết với bạn:\n${postLink}`;
+
+            await Promise.all(
+                selectedRecipientIds.map(async (idNguoiDung) => {
+                    const started = (await userCommerceApi.batDauTroChuyen(idNguoiDung)) as { id_cuoc_tro_chuyen?: number };
+                    const idCuocTroChuyen = Number(started?.id_cuoc_tro_chuyen ?? 0);
+                    if (!Number.isFinite(idCuocTroChuyen) || idCuocTroChuyen <= 0) return;
+                    await userCommerceApi.guiTinNhan(idCuocTroChuyen, message);
+                }),
+            );
+            setActionMessage(`Đã gửi chia sẻ cho ${selectedRecipientIds.length} người`);
+            closeShareModal();
+        } catch (error) {
+            setActionMessage(error instanceof Error ? error.message : 'Không thể gửi chia sẻ qua tin nhắn');
+        } finally {
+            setIsSubmittingShare(false);
+        }
+    }, [closeShareModal, isSubmittingShare, nguoiDung?.ten_hien_thi, selectedRecipientIds, shareTargetPost?.id, shareText]);
+
+    const handlePickReportReason = useCallback(async (reason: { value: string; label: string }) => {
+        const postId = Number(reportTargetPost?.id ?? 0);
+        if (!Number.isFinite(postId) || postId <= 0 || isSubmittingReport) return;
+        setIsSubmittingReport(true);
+        try {
+            await userContentApi.baoCaoBaiViet(postId, {
+                loai_vi_pham: reason.value,
+                noi_dung_bao_cao: reason.label,
+            });
+            setIsReportModalOpen(false);
+            setIsReportDoneModalOpen(true);
+            setActionMessage('Đã gửi báo cáo bài viết');
+        } catch (error) {
+            setActionMessage(error instanceof Error ? error.message : 'Không thể báo cáo bài viết');
+        } finally {
+            setIsSubmittingReport(false);
+        }
+    }, [isSubmittingReport, reportTargetPost?.id]);
 
     return (
         <>
@@ -837,21 +1380,52 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
 
                     <section className="rounded-[22px] bg-[#e6e9e6] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
                         <div className="flex flex-wrap justify-end gap-4">
-                            {data.filters.map((filter) => (
-                                <button
-                                    key={filter}
-                                    className="inline-flex min-w-[180px] items-center justify-between rounded-[10px] bg-white px-5 py-3 text-base text-[#616462] shadow-[0_3px_8px_rgba(0,0,0,0.03)]"
+                            <label className="inline-flex min-w-[180px] items-center justify-between gap-3 rounded-[10px] bg-white px-4 py-3 text-base text-[#616462] shadow-[0_3px_8px_rgba(0,0,0,0.03)]">
+                                <span>Danh mục</span>
+                                <select
+                                    value={categoryFilter}
+                                    onChange={(event) => setCategoryFilter(event.target.value as FeedCategoryFilter)}
+                                    className="bg-transparent text-sm outline-none"
                                 >
-                                    {filter}
-                                    <img src={homeUiAssets.filterChevron} alt="" className="h-5 w-5 object-contain" />
-                                </button>
-                            ))}
+                                    <option value="tat_ca">Tất cả</option>
+                                    <option value="bai_viet">Bài viết</option>
+                                    <option value="video">Video</option>
+                                    <option value="repost">Bài đăng lại</option>
+                                </select>
+                            </label>
+                            <label className="inline-flex min-w-[180px] items-center justify-between gap-3 rounded-[10px] bg-white px-4 py-3 text-base text-[#616462] shadow-[0_3px_8px_rgba(0,0,0,0.03)]">
+                                <span>Ẩm thực</span>
+                                <select
+                                    value={cuisineFilter}
+                                    onChange={(event) => setCuisineFilter(event.target.value as FeedCuisineFilter)}
+                                    className="bg-transparent text-sm outline-none"
+                                >
+                                    <option value="tat_ca">Tất cả</option>
+                                    <option value="co_hinh_anh">Có ảnh</option>
+                                    <option value="co_video">Có video</option>
+                                    <option value="chi_van_ban">Chỉ văn bản</option>
+                                </select>
+                            </label>
+                            <label className="inline-flex min-w-[180px] items-center justify-between gap-3 rounded-[10px] bg-white px-4 py-3 text-base text-[#616462] shadow-[0_3px_8px_rgba(0,0,0,0.03)]">
+                                <span>Thời gian</span>
+                                <select
+                                    value={timeFilter}
+                                    onChange={(event) => setTimeFilter(event.target.value as FeedTimeFilter)}
+                                    className="bg-transparent text-sm outline-none"
+                                >
+                                    <option value="moi_nhat">Mới nhất</option>
+                                    <option value="hom_nay">Hôm nay</option>
+                                    <option value="hom_qua">Hôm qua</option>
+                                    <option value="tuan_nay">Tuần này</option>
+                                    <option value="thang_nay">Tháng này</option>
+                                </select>
+                            </label>
                         </div>
                     </section>
 
                     <section ref={dealSectionRef} className="grid gap-8 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.75fr)]">
                         <div className="space-y-8">
-                                {feedPosts.map((post) => (
+                                {paginatedFeedPosts.map((post) => (
                                     <FeedPostCard
                                         key={post.id}
                                         post={post}
@@ -861,8 +1435,33 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                             setCommentComposerOpen(false);
                                             setIsCommentModalOpen(true);
                                         }}
-                                        onOpenMenu={() => setIsMenuModalOpen(true)}
-                                        onOrder={() => setIsOrderModalOpen(true)}
+                                        onOrder={() => {
+                                            const postId = Number(post.id);
+                                            if (!Number.isFinite(postId) || postId <= 0) {
+                                                setActionMessage('Không xác định được bài viết để đặt món');
+                                                return;
+                                            }
+                                            void userContentApi
+                                                .nhanLinkMonBaiViet(postId)
+                                                .then((payload: unknown) => {
+                                                    const data = (payload ?? {}) as { url?: unknown };
+                                                    const resolved = typeof data.url === 'string' ? data.url.trim() : '';
+                                                    const fallback = post.dishLink?.trim() ?? '';
+                                                    const nextLink = resolved || fallback;
+                                                    if (!nextLink) {
+                                                        setActionMessage('Bài viết này chưa gắn link món');
+                                                        return;
+                                                    }
+                                                    if (/^https?:\/\//i.test(nextLink)) {
+                                                        window.location.href = nextLink;
+                                                    } else {
+                                                        router.push(nextLink.startsWith('/') ? nextLink : `/${nextLink}`);
+                                                    }
+                                                })
+                                                .catch((error) => {
+                                                    setActionMessage(error instanceof Error ? error.message : 'Không thể mở link món');
+                                                });
+                                        }}
                                         onOpenDetail={() => setActivePostDetailId(Number(post.id) || null)}
                                         onOpenAuthorProfile={() => {
                                             const targetId = Number(post.authorId || 0);
@@ -898,7 +1497,6 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                                             : item,
                                                     ),
                                                 );
-                                                setActionMessage(data?.dang_theo_doi ? 'Đã theo dõi người dùng' : 'Đã bỏ theo dõi người dùng');
                                             })
                                             .catch((e) => setActionMessage(e instanceof Error ? e.message : 'Không thể theo dõi người dùng'));
                                     }}
@@ -933,42 +1531,38 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                             setActionMessage('Không thể chia sẻ lại một bài đăng lại');
                                             return;
                                         }
-                                        void userContentApi.chiaSeBaiViet(id)
-                                            .then((res: unknown) => {
-                                                const data = (res ?? {}) as { tong_luot_chia_se?: number };
-                                                bumpPostCounter(id, 'shareCount', data.tong_luot_chia_se);
-                                                setActionMessage('Đã chia sẻ bài viết');
-                                            })
-                                            .catch((e) => setActionMessage(e instanceof Error ? e.message : 'Không thể chia sẻ bài viết'));
+                                        openShareModal(post);
                                     }}
                                     onReport={() => {
-                                        const id = Number(post.id);
-                                        if (!Number.isFinite(id)) return;
-                                        const reason = window.prompt('Nhập lý do báo cáo bài viết');
-                                        if (!reason?.trim()) return;
-                                        void userContentApi.baoCaoBaiViet(id, {
-                                            loai_vi_pham: 'noi_dung_vi_pham',
-                                            noi_dung_bao_cao: reason.trim(),
-                                        })
-                                            .then(() => setActionMessage('Đã gửi báo cáo bài viết'))
-                                            .catch((e) => setActionMessage(e instanceof Error ? e.message : 'Không thể báo cáo bài viết'));
+                                        openReportModal(post);
                                     }}
                                 />
                             ))}
                             <div className="flex flex-col items-center gap-3 pt-2">
-                                {hasMorePosts ? (
+                                <div className="flex items-center gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => void loadMorePosts()}
-                                        disabled={isLoadingMorePosts}
-                                        className="rounded-full border border-[#2f8f22] px-5 py-2 text-sm font-semibold text-[#2f8f22] disabled:opacity-60"
+                                        onClick={() => setFeedCurrentPage((current) => Math.max(1, current - 1))}
+                                        disabled={currentFeedPage <= 1}
+                                        className="rounded-full border border-[#d7d7d7] px-4 py-2 text-sm font-semibold text-[#2f8f22] disabled:opacity-40"
                                     >
-                                        {isLoadingMorePosts ? 'Đang tải...' : 'Xem thêm bài viết'}
+                                        Trước
                                     </button>
-                                ) : (
-                                    <p className="text-sm text-[#6b7280]">Đã hiển thị tất cả bài viết.</p>
-                                )}
-                                <div ref={feedLoadMoreRef} className="h-2 w-full" />
+                                    <span className="text-sm text-[#4b5563]">
+                                        Trang {currentFeedPage}/{totalFeedPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFeedCurrentPage((current) => Math.min(totalFeedPages, current + 1))}
+                                        disabled={currentFeedPage >= totalFeedPages}
+                                        className="rounded-full border border-[#d7d7d7] px-4 py-2 text-sm font-semibold text-[#2f8f22] disabled:opacity-40"
+                                    >
+                                        Sau
+                                    </button>
+                                </div>
+                                <p className="text-sm text-[#6b7280]">
+                                    Hiển thị tối đa {FEED_PAGE_SIZE} bài viết mỗi trang
+                                </p>
                             </div>
                         </div>
 
@@ -1053,39 +1647,100 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                             </div>
 
                             <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-4">
-                                {menuData.categories
-                                    .filter((category) => !activeMenuCategory || category.id === activeMenuCategory)
-                                    .map((category) => {
-                                        const categoryItems = filteredMenuItems.filter((item) => item.categoryId === category.id);
+                                {normalizedMenuQuery ? (
+                                    <section className="mb-7">
+                                        <h3 className="mb-4 text-[20px] font-medium uppercase text-[#8b929c]">
+                                            Kết quả tìm kiếm ({menuSearchResults.length})
+                                        </h3>
+                                        <div>
+                                            {menuSearchResults.map((item) => (
+                                                <article
+                                                    key={`search-${item.id}`}
+                                                    className="grid grid-cols-[84px_minmax(0,1fr)_140px_56px] items-center gap-5 border-b border-[#f0f0f0] py-3.5"
+                                                >
+                                                    <img src={item.image} alt={item.name} className="h-[64px] w-[64px] rounded-[4px] object-cover" />
+                                                    <div className="min-w-0">
+                                                        <h4 className="truncate text-[20px] font-bold text-[#3b3b3b]">{item.name}</h4>
+                                                        <p className="mt-1 line-clamp-2 text-[14px] text-[#6d6d6d]">{item.note}</p>
+                                                    </div>
+                                                    <div className="text-right text-[18px] font-bold text-[#2aa8f4]">{item.price}</div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (!isAuthenticated) {
+                                                                setIsOrderModalOpen(true);
+                                                                return;
+                                                            }
+                                                            const dishId = Number(item.id);
+                                                            if (Number.isFinite(dishId) && dishId > 0) {
+                                                                setIsMenuModalOpen(false);
+                                                                router.push(`/ranking/food/${dishId}`);
+                                                                return;
+                                                            }
+                                                            setActionMessage('Không xác định được món để thêm vào giỏ');
+                                                        }}
+                                                        className="flex h-[36px] w-[36px] items-center justify-center rounded-[8px] bg-[#ff5a2c] text-[30px] leading-none text-white transition hover:bg-[#ef4b1d]"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </article>
+                                            ))}
+                                            {menuSearchResults.length === 0 ? (
+                                                <p className="py-4 text-[15px] text-[#6b7280]">Không tìm thấy món phù hợp.</p>
+                                            ) : null}
+                                        </div>
+                                    </section>
+                                ) : (
+                                    menuData.categories
+                                        .filter((category) => !activeMenuCategory || category.id === activeMenuCategory)
+                                        .map((category) => {
+                                            const categoryItems = filteredMenuItemsByCategory.filter((item) => item.categoryId === category.id);
 
-                                        if (categoryItems.length === 0) return null;
+                                            if (categoryItems.length === 0) return null;
 
-                                        return (
-                                            <section key={category.id} className="mb-7">
-                                                <h3 className="mb-4 text-[20px] font-medium uppercase text-[#8b929c]">
-                                                    {category.label}
-                                                </h3>
-                                                <div>
-                                                    {categoryItems.map((item) => (
-                                                        <article
-                                                            key={item.id}
-                                                            className="grid grid-cols-[84px_minmax(0,1fr)_140px_56px] items-center gap-5 border-b border-[#f0f0f0] py-3.5"
-                                                        >
-                                                            <img src={item.image} alt={item.name} className="h-[64px] w-[64px] rounded-[4px] object-cover" />
-                                                            <div className="min-w-0">
-                                                                <h4 className="truncate text-[20px] font-bold text-[#3b3b3b]">{item.name}</h4>
-                                                                <p className="mt-1 line-clamp-2 text-[14px] text-[#6d6d6d]">{item.note}</p>
-                                                            </div>
-                                                            <div className="text-right text-[18px] font-bold text-[#2aa8f4]">{item.price}</div>
-                                                            <button className="flex h-[36px] w-[36px] items-center justify-center rounded-[8px] bg-[#ff5a2c] text-[30px] leading-none text-white transition hover:bg-[#ef4b1d]">
-                                                                +
-                                                            </button>
-                                                        </article>
-                                                    ))}
-                                                </div>
-                                            </section>
-                                        );
-                                    })}
+                                            return (
+                                                <section key={category.id} className="mb-7">
+                                                    <h3 className="mb-4 text-[20px] font-medium uppercase text-[#8b929c]">
+                                                        {category.label}
+                                                    </h3>
+                                                    <div>
+                                                        {categoryItems.map((item) => (
+                                                            <article
+                                                                key={item.id}
+                                                                className="grid grid-cols-[84px_minmax(0,1fr)_140px_56px] items-center gap-5 border-b border-[#f0f0f0] py-3.5"
+                                                            >
+                                                                <img src={item.image} alt={item.name} className="h-[64px] w-[64px] rounded-[4px] object-cover" />
+                                                                <div className="min-w-0">
+                                                                    <h4 className="truncate text-[20px] font-bold text-[#3b3b3b]">{item.name}</h4>
+                                                                    <p className="mt-1 line-clamp-2 text-[14px] text-[#6d6d6d]">{item.note}</p>
+                                                                </div>
+                                                                <div className="text-right text-[18px] font-bold text-[#2aa8f4]">{item.price}</div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (!isAuthenticated) {
+                                                                            setIsOrderModalOpen(true);
+                                                                            return;
+                                                                        }
+                                                                        const dishId = Number(item.id);
+                                                                        if (Number.isFinite(dishId) && dishId > 0) {
+                                                                            setIsMenuModalOpen(false);
+                                                                            router.push(`/ranking/food/${dishId}`);
+                                                                            return;
+                                                                        }
+                                                                        setActionMessage('Không xác định được món để thêm vào giỏ');
+                                                                    }}
+                                                                    className="flex h-[36px] w-[36px] items-center justify-center rounded-[8px] bg-[#ff5a2c] text-[30px] leading-none text-white transition hover:bg-[#ef4b1d]"
+                                                                >
+                                                                    +
+                                                                </button>
+                                                            </article>
+                                                        ))}
+                                                    </div>
+                                                </section>
+                                            );
+                                        })
+                                )}
                             </div>
 
                             {!isAuthenticated ? (
@@ -1176,6 +1831,10 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                 isOpen={isGalleryModalOpen}
                 onClose={() => setIsGalleryModalOpen(false)}
                 card={activeGalleryCard}
+                onOrder={() => {
+                    setIsGalleryModalOpen(false);
+                    setIsOrderModalOpen(true);
+                }}
             />
 
             <CommentModal
@@ -1193,6 +1852,42 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                 onCommentPosted={(postId) => {
                     bumpPostCounter(postId, 'commentCount', undefined, 1);
                 }}
+            />
+
+            <SharePostModal
+                isOpen={isShareModalOpen}
+                post={shareTargetPost}
+                recipients={shareRecipients}
+                selectedRecipientIds={selectedRecipientIds}
+                shareText={shareText}
+                audience={shareAudience}
+                isLoadingRecipients={isLoadingShareRecipients}
+                isSubmitting={isSubmittingShare}
+                onClose={closeShareModal}
+                onToggleRecipient={toggleShareRecipient}
+                onChangeText={setShareText}
+                onChangeAudience={setShareAudience}
+                onShareNow={() => {
+                    void handleShareNow();
+                }}
+                onSendMessage={() => {
+                    void handleSendShareViaMessage();
+                }}
+            />
+
+            <ReportPostModal
+                isOpen={isReportModalOpen}
+                isSubmitting={isSubmittingReport}
+                onClose={closeReportModal}
+                onPickReason={(reason) => {
+                    void handlePickReportReason(reason);
+                }}
+            />
+
+            <ReportDoneModal
+                isOpen={isReportDoneModalOpen}
+                authorName={reportTargetPost?.author || 'người dùng này'}
+                onClose={closeReportDoneModal}
             />
         </>
     );

@@ -14,6 +14,7 @@ import {
   DangKyDto,
   XacNhanOtpDto,
   DangNhapDto,
+  DangNhapGoogleDto,
   ChonVaiTroDto,
   QuenMatKhauDto,
   DatLaiMatKhauDto,
@@ -83,14 +84,32 @@ export class AuthController {
     const result = await this.authService.dangNhapVoiVaiTro(
       dto.email,
       dto.vai_tro,
+      dto.luu_dang_nhap ?? false,
       ip,
       userAgent,
     );
 
     if ("access_token" in result) {
-      this.setCookie(res, result.access_token, false);
+      this.setCookie(res, result.access_token, dto.luu_dang_nhap ?? false);
     }
 
+    return result;
+  }
+
+  @Public()
+  @Post("google")
+  @HttpCode(HttpStatus.OK)
+  async dangNhapGoogle(
+    @Body() dto: DangNhapGoogleDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
+    const ip = req.ip;
+    const userAgent = req.headers["user-agent"];
+    const result = await this.authService.dangNhapGoogle(dto, ip, userAgent);
+    if ("access_token" in result) {
+      this.setCookie(res, result.access_token, dto.luu_dang_nhap);
+    }
     return result;
   }
 

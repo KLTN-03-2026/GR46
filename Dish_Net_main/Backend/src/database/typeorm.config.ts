@@ -28,6 +28,9 @@ import { GioHangChiTietEntity } from "../Api/User/entities/gio-hang-chi-tiet.ent
 import { ThanhToanEntity } from "../Api/User/entities/thanh-toan.entity";
 import { DonHangKhuyenMaiEntity } from "../Api/User/entities/don-hang-khuyen-mai.entity";
 import { PhienThanhToanEntity } from "../Api/User/entities/phien-thanh-toan.entity";
+import { TaiKhoanRutTienEntity } from "../Api/User/entities/tai-khoan-rut-tien.entity";
+import { YeuCauRutTienEntity } from "../Api/User/entities/yeu-cau-rut-tien.entity";
+import { LuotNhanLinkBaiVietEntity } from "../Api/User/entities/luot-nhan-link-bai-viet.entity";
 import type { TypeOrmModuleOptions } from "@nestjs/typeorm";
 import type { DataSourceOptions } from "typeorm";
 
@@ -69,6 +72,9 @@ export function getTypeOrmConfig(): TypeOrmModuleOptions & DataSourceOptions {
       ThanhToanEntity,
       DonHangKhuyenMaiEntity,
       PhienThanhToanEntity,
+      TaiKhoanRutTienEntity,
+      YeuCauRutTienEntity,
+      LuotNhanLinkBaiVietEntity,
     ],
     migrations: [join(__dirname, "migrations", "*{.ts,.js}")],
     synchronize: false,

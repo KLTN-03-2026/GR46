@@ -13,7 +13,7 @@ export default function RegisterVerifyPage() {
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
-    const [countdown, setCountdown] = useState(60);
+    const [countdown, setCountdown] = useState(120);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function RegisterVerifyPage() {
     const handleResend = async () => {
         try {
             await authApi.guiLaiOtp({ email, loai_xac_thuc: 'dang_ky' });
-            setCountdown(60);
+            setCountdown(120);
         } catch {}
     };
 
@@ -77,8 +77,12 @@ export default function RegisterVerifyPage() {
             await authApi.xacNhanDangKy({ email, ma_otp: otp.join('') });
             sessionStorage.removeItem('register_email');
             setShowSuccessModal(true);
-        } catch (err: any) {
-            setServerError(err.message || 'Xác nhận thất bại');
+        } catch (err: unknown) {
+            if (err instanceof Error && err.message) {
+                setServerError(err.message);
+            } else {
+                setServerError('Xác nhận thất bại');
+            }
         } finally {
             setLoading(false);
         }
@@ -119,7 +123,7 @@ export default function RegisterVerifyPage() {
                         </div>
 
                         <p className="mb-6 mt-2 text-center text-[13px] text-[#9aa1a9]">
-                            Mã xác nhận chỉ có hiệu lực trong vòng 01 tiếng.{' '}
+                            Mã xác nhận chỉ có hiệu lực trong vòng 02 phút.{' '}
                             <span className="font-bold text-[#285E19]">{formatTime(countdown)}</span>
                             {countdown === 0 && (
                                 <button type="button" onClick={handleResend} className="ml-2 font-bold text-[#3b82f6] hover:underline">

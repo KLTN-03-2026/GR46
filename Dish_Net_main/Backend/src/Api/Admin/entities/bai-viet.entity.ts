@@ -35,6 +35,12 @@ export class BaiVietEntity {
   @Column({ type: "varchar", length: 20, default: "hien_thi" })
   trang_thai_duyet: string;
 
+  @Column({ type: "tinyint", width: 1, default: 0 })
+  bat_kiem_tien: boolean;
+
+  @Column({ type: "text", nullable: true })
+  link_mon_an: string | null;
+
   @Column({ type: "bigint", default: 0 })
   tong_luot_xem: number;
 

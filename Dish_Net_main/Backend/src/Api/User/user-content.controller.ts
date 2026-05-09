@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   BadRequestException,
+  Delete,
   Get,
+  Patch,
   UploadedFile,
   UseInterceptors,
   Param,
@@ -23,12 +25,15 @@ import {
   BangXepHangMiniQueryDto,
   BaoCaoNguoiDungDto,
   BaoCaoBaiVietDto,
+  ChiaSeBaiVietDto,
   ChinhSuaTrangCaNhanDto,
   KhamPhaQueryDto,
   MonTheoDanhMucQueryDto,
   NoiDungTrangCaNhanQueryDto,
   PhanTrangQueryDto,
   TaoBinhLuanDto,
+  TaoBaiVietDto,
+  CapNhatBaiVietDto,
   TimKiemQueryDto,
 } from './dto/user-content.dto';
 
@@ -78,6 +83,16 @@ export class UserContentController {
   @Get('kham-pha')
   async layTrangKhamPha(@Query() query: KhamPhaQueryDto) {
     return this.userContentService.layTrangKhamPha(query);
+  }
+
+  /**
+   * Chi tiết cửa hàng theo id
+   * GET /user/cua-hang/:idCuaHang
+   */
+  @Public()
+  @Get('cua-hang/:idCuaHang')
+  async layChiTietCuaHang(@Param('idCuaHang') idCuaHang: number) {
+    return this.userContentService.layChiTietCuaHang(idCuaHang);
   }
 
   /**
@@ -157,6 +172,42 @@ export class UserContentController {
       idNguoiDung,
       req.user!.sub,
     );
+  }
+
+  /**
+   * GET /user/nguoi-dung/danh-sach-dang-theo-doi
+   */
+  @Get('nguoi-dung/danh-sach-dang-theo-doi')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async layDanhSachDangTheoDoi(
+    @Req() req: AuthenticatedRequest,
+    @Query('tu_khoa') tuKhoa?: string,
+  ) {
+    return this.userContentService.layDanhSachDangTheoDoi(req.user!.sub, tuKhoa);
+  }
+
+  /**
+   * GET /user/nguoi-dung/danh-sach-nguoi-theo-doi
+   */
+  @Get('nguoi-dung/danh-sach-nguoi-theo-doi')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async layDanhSachNguoiTheoDoi(
+    @Req() req: AuthenticatedRequest,
+    @Query('tu_khoa') tuKhoa?: string,
+  ) {
+    return this.userContentService.layDanhSachNguoiTheoDoi(req.user!.sub, tuKhoa);
+  }
+
+  /**
+   * DELETE /user/nguoi-dung/:idNguoiDung/xoa-nguoi-theo-doi
+   */
+  @Delete('nguoi-dung/:idNguoiDung/xoa-nguoi-theo-doi')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async xoaNguoiTheoDoi(
+    @Req() req: AuthenticatedRequest,
+    @Param('idNguoiDung') idNguoiDung: number,
+  ) {
+    return this.userContentService.xoaNguoiTheoDoi(idNguoiDung, req.user!.sub);
   }
 
   /**
@@ -358,8 +409,29 @@ export class UserContentController {
    */
   @Public()
   @Get('bai-viet/:idBaiViet')
-  async layChiTietBaiViet(@Param('idBaiViet') idBaiViet: number) {
-    return this.userContentService.layChiTietBaiViet(idBaiViet);
+  async layChiTietBaiViet(
+    @Req() req: AuthenticatedRequest,
+    @Param('idBaiViet') idBaiViet: number,
+  ) {
+    return this.userContentService.layChiTietBaiViet(idBaiViet, req.user?.sub);
+  }
+
+  /**
+   * PB25 - Nhấn link món từ bài viết kiếm tiền
+   * GET /user/bai-viet/:idBaiViet/link-mon
+   */
+  @Public()
+  @Get('bai-viet/:idBaiViet/link-mon')
+  async nhanLinkMon(
+    @Req() req: AuthenticatedRequest,
+    @Param('idBaiViet') idBaiViet: number,
+  ) {
+    return this.userContentService.nhanLinkMon(
+      idBaiViet,
+      req.user?.sub,
+      req.ip ?? null,
+      String(req.headers['user-agent'] ?? ''),
+    );
   }
 
   /**
@@ -399,6 +471,113 @@ export class UserContentController {
   }
 
   /**
+   * PB07 - Hữu ích bình luận (toggle)
+   * POST /user/binh-luan/:idBinhLuan/tuong-tac/thich
+   */
+  @Post('binh-luan/:idBinhLuan/tuong-tac/thich')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async toggleThichBinhLuan(
+    @Req() req: AuthenticatedRequest,
+    @Param('idBinhLuan') idBinhLuan: number,
+  ) {
+    return this.userContentService.toggleThichBinhLuan(idBinhLuan, req.user!.sub);
+  }
+
+  /**
+   * PB24 - Upload ảnh/video bài viết
+   * POST /user/bai-viet/upload
+   */
+  @Post('bai-viet/upload')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req: any, _file: any, cb: any) => {
+          const uploadDir = join(process.cwd(), 'uploads', 'posts');
+          if (!existsSync(uploadDir)) {
+            mkdirSync(uploadDir, { recursive: true });
+          }
+          cb(null, uploadDir);
+        },
+        filename: (_req: any, file: any, cb: any) => {
+          const ext = extname(file.originalname || '').toLowerCase() || '.bin';
+          const safeExt = [
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.gif',
+            '.webp',
+            '.mp4',
+            '.mov',
+            '.avi',
+            '.mkv',
+          ].includes(ext)
+            ? ext
+            : '.bin';
+          cb(null, `post-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+        },
+      }),
+      fileFilter: (_req: any, file: any, cb: any) => {
+        const isImage = file.mimetype?.startsWith('image/');
+        const isVideo = file.mimetype?.startsWith('video/');
+        if (!isImage && !isVideo) {
+          cb(new BadRequestException('Chỉ hỗ trợ file ảnh hoặc video'), false);
+          return;
+        }
+        cb(null, true);
+      },
+      limits: {
+        fileSize: 50 * 1024 * 1024,
+      },
+    }),
+  )
+  async uploadTepBaiViet(
+    @Req() req: any,
+    @UploadedFile() file?: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Thiếu file tải lên');
+    }
+    const host = req.get('host') ?? '127.0.0.1:3009';
+    const protocol = req.protocol ?? 'http';
+    const url = `${protocol}://${host}/uploads/posts/${file.filename}`;
+    const loai_tep = file.mimetype?.startsWith('video/') ? 'video' : 'hinh_anh';
+    return { url, loai_tep };
+  }
+
+  /**
+   * PB24 - Tạo bài viết
+   * POST /user/bai-viet
+   */
+  @Post('bai-viet')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async taoBaiViet(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: TaoBaiVietDto,
+  ) {
+    return this.userContentService.taoBaiViet(req.user!.sub, dto);
+  }
+
+  @Patch('bai-viet/:idBaiViet')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async capNhatBaiViet(
+    @Req() req: AuthenticatedRequest,
+    @Param('idBaiViet') idBaiViet: number,
+    @Body() dto: CapNhatBaiVietDto,
+  ) {
+    return this.userContentService.capNhatBaiViet(idBaiViet, req.user!.sub, dto);
+  }
+
+  @Delete('bai-viet/:idBaiViet')
+  @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
+  async xoaBaiViet(
+    @Req() req: AuthenticatedRequest,
+    @Param('idBaiViet') idBaiViet: number,
+  ) {
+    return this.userContentService.xoaBaiViet(idBaiViet, req.user!.sub);
+  }
+
+  /**
    * PB07 - Yêu thích bài viết (toggle)
    * POST /user/bai-viet/:idBaiViet/tuong-tac/thich
    */
@@ -433,8 +612,9 @@ export class UserContentController {
   async chiaSe(
     @Req() req: AuthenticatedRequest,
     @Param('idBaiViet') idBaiViet: number,
+    @Body() dto: ChiaSeBaiVietDto,
   ) {
-    return this.userContentService.chiaSeBaiViet(idBaiViet, req.user!.sub);
+    return this.userContentService.chiaSeBaiViet(idBaiViet, req.user!.sub, dto);
   }
 
   /**

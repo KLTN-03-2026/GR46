@@ -87,11 +87,11 @@ function LogoBadge({ value }: { value?: string }) {
 
 function ScoreValue({ value }: { value: string }) {
   const [rating, detail] = value.split(' ★ ');
+  const starSuffix = detail ? `★ ${detail}` : '★';
 
   return (
     <span className="text-[17px] font-bold text-[#f3a000]">
-      {rating} <span className="text-[#ffbc08]">★</span>{' '}
-      <span className="font-medium text-[#c8bc6f]">{detail ? detail : ''}</span>
+      {rating} <span className="text-[#f3a000]">{starSuffix}</span>
     </span>
   );
 }
@@ -113,7 +113,6 @@ export default function RankingPageClient({
   const currentTab = tabOrder.includes(activeTab) ? activeTab : initialTab;
   const config = initialData[currentTab];
   const currentQuery = searchParams.get('q') ?? initialQuery;
-  const filterKhuVuc = searchParams.get('khu_vuc') ?? '';
   const filterSoDonHang = searchParams.get('so_don_hang_tu') ?? '';
   const filterDanhGia = searchParams.get('diem_danh_gia_tu') ?? '';
   const filterTrangThai = searchParams.get('trang_thai') ?? '';
@@ -153,12 +152,12 @@ export default function RankingPageClient({
         : 'grid-cols-[74px_minmax(280px,1.45fr)_minmax(190px,0.95fr)_minmax(180px,0.85fr)_minmax(180px,0.9fr)_110px]';
 
   return (
-    <div className="bg-[#f5f4f0] py-4 lg:py-5">
-      <section className="mx-auto w-full max-w-[1520px] rounded-[24px] bg-[#f3f1ed] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <div className="bg-[#f5f4f0] py-2 lg:py-3">
+      <section className="mx-auto w-full max-w-[1520px] rounded-[24px] bg-[#f3f1ed] px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
         <div className="mx-auto max-w-[1340px]">
           <h1 className="text-[28px] font-bold uppercase tracking-[0.02em] text-black sm:text-[36px]">Bảng Xếp Hạng</h1>
 
-          <div className="mt-5 overflow-hidden rounded-[26px] bg-white shadow-[0_14px_32px_rgba(0,0,0,0.05)]">
+          <div className="mt-3 overflow-hidden rounded-[26px] bg-white shadow-[0_14px_32px_rgba(0,0,0,0.05)]">
             <div className="flex flex-col gap-4 border-b border-[#efebe5] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-5">
               <div className="grid w-full max-w-[640px] grid-cols-3 rounded-[18px] bg-[#f7f5f1] p-1">
                 {tabOrder.map((tab, index) => {
@@ -199,14 +198,6 @@ export default function RankingPageClient({
             <div className="border-b border-[#efebe5] bg-[#f7f5f1] px-4 py-4 sm:px-6 lg:px-8">
               <div className="flex flex-wrap items-center gap-4">
                 <span className="mr-3 text-[16px] font-semibold text-black sm:text-[18px]">Lọc theo</span>
-                <label className="flex h-[50px] min-w-[210px] items-center rounded-[8px] border border-[#b9c9b1] bg-white px-4">
-                  <input
-                    value={filterKhuVuc}
-                    onChange={(event) => setFilterParam('khu_vuc', event.target.value)}
-                    placeholder="Khu vực"
-                    className="w-full bg-transparent text-[15px] text-[#20251f] outline-none placeholder:text-[#80907a]"
-                  />
-                </label>
                 <SelectField
                   label="Số đơn hàng"
                   value={filterSoDonHang}

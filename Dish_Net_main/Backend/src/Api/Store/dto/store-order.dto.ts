@@ -44,6 +44,7 @@ export class GiaHanDonHangDto {
 }
 
 export class HoanTienDto {
+  @IsOptional()
   @IsString()
   ly_do_hoan?: string;
 }

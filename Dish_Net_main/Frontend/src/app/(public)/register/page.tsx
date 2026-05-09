@@ -9,10 +9,25 @@ type RegisterForm = {
     email: string;
     phone: string;
     displayName: string;
-    address: string;
+    province: string;
     password: string;
     confirmPassword: string;
 };
+
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i;
+const PHONE_REGEX = /^(0|\+84)(3|5|7|8|9)\d{8}$/;
+const VIETNAM_PROVINCES = [
+    'An Giang', 'Bà Rịa - Vũng Tàu', 'Bạc Liêu', 'Bắc Giang', 'Bắc Kạn', 'Bắc Ninh',
+    'Bến Tre', 'Bình Dương', 'Bình Định', 'Bình Phước', 'Bình Thuận', 'Cà Mau',
+    'Cao Bằng', 'Cần Thơ', 'Đà Nẵng', 'Đắk Lắk', 'Đắk Nông', 'Điện Biên', 'Đồng Nai',
+    'Đồng Tháp', 'Gia Lai', 'Hà Giang', 'Hà Nam', 'Hà Nội', 'Hà Tĩnh', 'Hải Dương',
+    'Hải Phòng', 'Hậu Giang', 'Hòa Bình', 'Hưng Yên', 'Khánh Hòa', 'Kiên Giang',
+    'Kon Tum', 'Lai Châu', 'Lạng Sơn', 'Lào Cai', 'Lâm Đồng', 'Long An', 'Nam Định',
+    'Nghệ An', 'Ninh Bình', 'Ninh Thuận', 'Phú Thọ', 'Phú Yên', 'Quảng Bình',
+    'Quảng Nam', 'Quảng Ngãi', 'Quảng Ninh', 'Quảng Trị', 'Sóc Trăng', 'Sơn La',
+    'Tây Ninh', 'Thái Bình', 'Thái Nguyên', 'Thanh Hóa', 'Thừa Thiên Huế', 'Tiền Giang',
+    'TP. Hồ Chí Minh', 'Trà Vinh', 'Tuyên Quang', 'Vĩnh Long', 'Vĩnh Phúc', 'Yên Bái',
+];
 
 function FieldError({ message }: { message?: string }) {
     if (!message) return null;
@@ -70,7 +85,7 @@ function AuthField({
 export default function RegisterPage() {
     const router = useRouter();
     const [form, setForm] = useState<RegisterForm>({
-        email: '', phone: '', displayName: '', address: '', password: '', confirmPassword: '',
+        email: '', phone: '', displayName: '', province: '', password: '', confirmPassword: '',
     });
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -79,10 +94,18 @@ export default function RegisterPage() {
     const [serverError, setServerError] = useState('');
 
     const errors = useMemo(() => ({
-        email: form.email.trim() ? '' : 'Vui lòng điền vào mục này.',
-        phone: form.phone.trim() ? '' : 'Vui lòng điền vào mục này.',
+        email: !form.email.trim()
+            ? 'Vui lòng điền vào mục này.'
+            : !EMAIL_REGEX.test(form.email.trim())
+                ? 'Email không đúng định dạng.'
+                : '',
+        phone: !form.phone.trim()
+            ? 'Vui lòng điền vào mục này.'
+            : !PHONE_REGEX.test(form.phone.trim())
+                ? 'Số điện thoại không hợp lệ (VD: 09xxxxxxxx hoặc +849xxxxxxxx).'
+                : '',
         displayName: form.displayName.trim() ? '' : 'Vui lòng điền vào mục này.',
-        address: form.address.trim() ? '' : 'Vui lòng điền vào mục này.',
+        province: form.province.trim() ? '' : 'Vui lòng chọn tỉnh / thành.',
         password: form.password.trim() ? '' : 'Vui lòng điền vào mục này.',
         confirmPassword: !form.confirmPassword.trim()
             ? 'Vui lòng điền vào mục này.'
@@ -101,14 +124,14 @@ export default function RegisterPage() {
                 email: form.email,
                 so_dien_thoai: form.phone,
                 ten_hien_thi: form.displayName,
-                khu_vuc: form.address,
+                khu_vuc: form.province,
                 mat_khau: form.password,
                 xac_nhan_mat_khau: form.confirmPassword,
             });
             sessionStorage.setItem('register_email', form.email);
             router.push('/register/verify');
-        } catch (err: any) {
-            setServerError(err.message || 'Đăng ký thất bại');
+        } catch (err: unknown) {
+            setServerError(err instanceof Error ? err.message : 'Đăng ký thất bại');
         } finally {
             setLoading(false);
         }
@@ -135,9 +158,27 @@ export default function RegisterPage() {
                     <AuthField id="displayName" icon={<InputIcon type="user" />} placeholder="Tên hiển thị" type="text"
                         value={form.displayName} onChange={(value) => setForm((prev) => ({ ...prev, displayName: value }))}
                         error={submitted ? errors.displayName : ''} />
-                    <AuthField id="address" icon={<InputIcon type="map" />} placeholder="Khu vực / Địa chỉ" type="text"
-                        value={form.address} onChange={(value) => setForm((prev) => ({ ...prev, address: value }))}
-                        error={submitted ? errors.address : ''} />
+                    <div>
+                        <div className={`flex h-[46px] items-center rounded-[6px] border bg-white px-3 transition ${submitted && errors.province ? 'border-[#ff6b6b] bg-[#fff8f8]' : 'border-[#dfe3e8] focus-within:border-[#61AF5E] focus-within:shadow-[0_0_0_3px_rgba(97,175,94,0.12)]'}`}>
+                            <span className={`mr-2 shrink-0 ${submitted && errors.province ? 'text-[#ff6b6b]' : 'text-[#b4bbc4]'}`}>
+                                <InputIcon type="map" />
+                            </span>
+                            <select
+                                id="province"
+                                value={form.province}
+                                onChange={(event) => setForm((prev) => ({ ...prev, province: event.target.value }))}
+                                className="h-full w-full border-none bg-transparent text-[14px] text-[#1f2937] focus:outline-none"
+                            >
+                                <option value="" className="text-[#b8bfc8]">Chọn tỉnh / thành</option>
+                                {VIETNAM_PROVINCES.map((province) => (
+                                    <option key={province} value={province}>
+                                        {province}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <FieldError message={submitted ? errors.province : ''} />
+                    </div>
                     <AuthField id="password" icon={<InputIcon type="lock" />} placeholder="Mật khẩu"
                         type={showPassword ? 'text' : 'password'} value={form.password}
                         onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}

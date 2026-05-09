@@ -10,6 +10,8 @@ import { DanhMucMonEntity } from '../Admin/entities/danh-muc-mon.entity';
 import { MonAnEntity } from '../Admin/entities/mon-an.entity';
 import { ToppingEntity } from '../Admin/entities/topping.entity';
 import { CuaHangEntity } from '../Admin/entities/cua-hang.entity';
+import { DonHangChiTietEntity } from '../Admin/entities/don-hang-chi-tiet.entity';
+import { DonHangEntity } from '../Admin/entities/don-hang.entity';
 import {
   CapNhatDanhMucDto,
   CapNhatMonAnDto,
@@ -32,6 +34,8 @@ export class StoreMenuService {
     private readonly toppingRepo: Repository<ToppingEntity>,
     @InjectRepository(CuaHangEntity)
     private readonly cuaHangRepo: Repository<CuaHangEntity>,
+    @InjectRepository(DonHangChiTietEntity)
+    private readonly donHangChiTietRepo: Repository<DonHangChiTietEntity>,
   ) {}
 
   private async hasDanhMucMonTable(): Promise<boolean> {
@@ -405,6 +409,7 @@ export class StoreMenuService {
     if (!monAn) {
       throw new NotFoundException('Món ăn không tồn tại');
     }
+    await this.damBaoMonKhongNamTrongDonDangXuLy(cuaHang.id, id);
     if (payload.id_danh_muc !== undefined && payload.id_danh_muc && !hasDanhMucTable) {
       throw new BadRequestException(
         'Không thể cập nhật danh mục vì database chưa được cập nhật bảng danh_muc_mon',
@@ -487,6 +492,7 @@ export class StoreMenuService {
     if (!monAn) {
       throw new NotFoundException('Món ăn không tồn tại');
     }
+    await this.damBaoMonKhongNamTrongDonDangXuLy(cuaHang.id, id);
 
     await this.toppingRepo.delete({ id_mon_an: id });
     await this.monAnRepo.delete(id);
@@ -580,6 +586,36 @@ export class StoreMenuService {
       default:
         qb.orderBy('ma.ngay_tao', 'DESC').addOrderBy('ma.id', 'DESC');
         break;
+    }
+  }
+
+  private async damBaoMonKhongNamTrongDonDangXuLy(
+    idCuaHang: number,
+    idMonAn: number,
+  ): Promise<void> {
+    const trangThaiDangXuLy = [
+      'cho_xac_nhan',
+      'da_xac_nhan',
+      'dang_chuan_bi',
+      'dang_giao',
+      'da_giao',
+      'tra_hang',
+    ];
+
+    const dangCoDon = await this.donHangChiTietRepo
+      .createQueryBuilder('ct')
+      .innerJoin(DonHangEntity, 'dh', 'dh.id = ct.id_don_hang')
+      .where('ct.id_mon_an = :idMonAn', { idMonAn })
+      .andWhere('dh.id_cua_hang = :idCuaHang', { idCuaHang })
+      .andWhere('dh.trang_thai_don_hang IN (:...trangThai)', {
+        trangThai: trangThaiDangXuLy,
+      })
+      .getExists();
+
+    if (dangCoDon) {
+      throw new BadRequestException(
+        'Món đang có đơn hàng xử lý nên không thể sửa hoặc xóa',
+      );
     }
   }
 }

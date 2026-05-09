@@ -34,9 +34,11 @@ import {
   HuyDonHangDto,
   TaoHoTroDto,
   ThemVaoGioHangDto,
+  TaoYeuCauRutTienDto,
   YeuCauHoanTienDto,
 } from './dto/user-commerce.dto';
 import { UserCommerceService } from './user-commerce.service';
+import { ChatGateway } from './chat.gateway';
 
 type AuthenticatedRequest = Request & {
   user?: { sub: number; email: string; vai_tro: string };
@@ -45,7 +47,10 @@ type AuthenticatedRequest = Request & {
 @Controller('user')
 @Roles('nguoi_dung', 'nha_sang_tao', 'chu_cua_hang')
 export class UserCommerceController {
-  constructor(private readonly userCommerceService: UserCommerceService) {}
+  constructor(
+    private readonly userCommerceService: UserCommerceService,
+    private readonly chatGateway: ChatGateway,
+  ) {}
 
   // PB14 - Hỗ trợ
   @Post('ho-tro')
@@ -54,6 +59,51 @@ export class UserCommerceController {
     @Body() dto: TaoHoTroDto,
   ) {
     return this.userCommerceService.taoYeuCauHoTro(req.user!.sub, dto);
+  }
+
+  @Post('ho-tro/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req: any, _file: any, cb: any) => {
+          const uploadDir = join(process.cwd(), 'uploads', 'support');
+          if (!existsSync(uploadDir)) {
+            mkdirSync(uploadDir, { recursive: true });
+          }
+          cb(null, uploadDir);
+        },
+        filename: (_req: any, file: any, cb: any) => {
+          const ext = extname(file.originalname || '').toLowerCase() || '.jpg';
+          const safeExt = [
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.gif',
+            '.webp',
+            '.pdf',
+            '.doc',
+            '.docx',
+            '.xls',
+            '.xlsx',
+            '.txt',
+          ].includes(ext)
+            ? ext
+            : '.txt';
+          cb(null, `support-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+        },
+      }),
+      limits: { fileSize: 8 * 1024 * 1024 },
+    }),
+  )
+  async uploadTepHoTro(@Req() req: any, @UploadedFile() file?: any) {
+    if (!file) {
+      throw new BadRequestException('Thiếu tệp tải lên');
+    }
+
+    const host = req.get('host') ?? '127.0.0.1:3009';
+    const protocol = req.protocol ?? 'http';
+    const url = `${protocol}://${host}/uploads/support/${file.filename}`;
+    return { url };
   }
 
   @Get('ho-tro')
@@ -70,6 +120,14 @@ export class UserCommerceController {
     @Query() query: DanhSachThongBaoQueryDto,
   ) {
     return this.userCommerceService.layDanhSachThongBao(req.user!.sub, query);
+  }
+
+  @Patch('thong-bao/:id/danh-dau-da-doc')
+  async danhDauThongBaoDaDoc(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: number,
+  ) {
+    return this.userCommerceService.danhDauThongBaoDaDoc(req.user!.sub, id);
   }
 
   @Get('ho-tro/:id')
@@ -92,6 +150,14 @@ export class UserCommerceController {
     @Body() dto: DangKyKiemTienNoiDungDto,
   ) {
     return this.userCommerceService.taoYeuCauKiemTienNoiDung(req.user!.sub, dto);
+  }
+
+  @Post('che-do-chuyen-nghiep/rut-tien')
+  async taoYeuCauRutTien(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: TaoYeuCauRutTienDto,
+  ) {
+    return this.userCommerceService.taoYeuCauRutTien(req.user!.sub, dto);
   }
 
   @Post('che-do-chuyen-nghiep/mo-cua-hang')
@@ -282,6 +348,14 @@ export class UserCommerceController {
     return this.userCommerceService.muaLaiDonHang(req.user!.sub, maDonHang);
   }
 
+  @Post('don-hang/:maDonHang/xac-nhan-da-giao')
+  async xacNhanDaGiao(
+    @Req() req: AuthenticatedRequest,
+    @Param('maDonHang') maDonHang: string,
+  ) {
+    return this.userCommerceService.xacNhanDaGiao(req.user!.sub, maDonHang);
+  }
+
   @Post('don-hang/:maDonHang/danh-gia')
   async danhGiaDonHang(
     @Req() req: AuthenticatedRequest,
@@ -319,10 +393,20 @@ export class UserCommerceController {
     @Param('idCuocTroChuyen') idCuocTroChuyen: number,
     @Body() dto: GuiTinNhanDto,
   ) {
-    return this.userCommerceService.guiTinNhan(
+    const result = await this.userCommerceService.guiTinNhan(
       req.user!.sub,
       idCuocTroChuyen,
       dto,
     );
+    try {
+      this.chatGateway.broadcastTinNhan(
+        idCuocTroChuyen,
+        result as Record<string, unknown>,
+        req.user!.sub,
+      );
+    } catch {
+      // socket broadcast best-effort; do not fail the REST request
+    }
+    return result;
   }
 }

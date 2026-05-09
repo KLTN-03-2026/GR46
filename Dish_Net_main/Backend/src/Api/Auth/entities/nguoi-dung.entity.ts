@@ -68,6 +68,9 @@ export class NguoiDungEntity {
   @Column({ type: "tinyint", width: 1, default: 0 })
   la_nha_sang_tao: boolean;
 
+  @Column({ type: "varchar", length: 20, default: "chua_dang_ky" })
+  trang_thai_kiem_tien_noi_dung: string;
+
   @Column({ type: "tinyint", width: 1, default: 0 })
   la_chu_cua_hang: boolean;
 

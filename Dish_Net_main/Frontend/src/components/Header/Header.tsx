@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/shared/AuthContext';
-import type { NotificationItem } from '@/features/notifications/data';
+import { resolveNotificationTarget, type NotificationItem } from '@/features/notifications/data';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
 function NotificationIcon({ type }: { type: NotificationItem['type'] }) {
@@ -38,6 +38,8 @@ export default function Header() {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+    const [unreadMessageCount, setUnreadMessageCount] = useState(0);
     const { nguoiDung, dangNhap, dangTai, dangXuat } = useAuth();
     const [recentSearches, setRecentSearches] = useState([
         'Bún bò', 'Mỳ Quảng', 'Khu AAA', 'Cơm ngon bếp việt', 'Cơm ngon hà thành', 'chay express',
@@ -80,19 +82,108 @@ export default function Header() {
                                 ? 'follow'
                                 : 'support',
                     message: String(item.tieu_de || item.noi_dung || 'Bạn có thông báo mới'),
+                    loaiThongBao: String(item.loai_thong_bao ?? ''),
+                    loaiDoiTuong: String(item.loai_doi_tuong ?? ''),
+                    idDoiTuong: item.id_doi_tuong != null ? Number(item.id_doi_tuong) : null,
                     time: item.ngay_tao ? new Date(item.ngay_tao).toLocaleString('vi-VN') : 'Vừa xong',
                     isRead: Boolean(item.da_doc),
                 }));
                 setNotifications(mapped);
+                setUnreadNotificationCount(mapped.filter((item) => !item.isRead).length);
             })
             .catch(() => {
-                if (mounted) setNotifications([]);
+                if (mounted) {
+                    setNotifications([]);
+                    setUnreadNotificationCount(0);
+                }
             });
 
         return () => {
             mounted = false;
         };
     }, [dangNhap, isNotificationsOpen]);
+
+    useEffect(() => {
+        if (!dangNhap) return;
+        let mounted = true;
+        const syncUnreadNotifications = async () => {
+            try {
+                const payload: any = await userCommerceApi.layThongBao({
+                    trang: 1,
+                    so_luong: 50,
+                    chi_chua_doc: true,
+                });
+                if (!mounted) return;
+                const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
+                setUnreadNotificationCount(rows.length);
+            } catch {
+                if (mounted) setUnreadNotificationCount(0);
+            }
+        };
+
+        void syncUnreadNotifications();
+        const intervalId = window.setInterval(() => {
+            void syncUnreadNotifications();
+        }, 15000);
+
+        return () => {
+            mounted = false;
+            window.clearInterval(intervalId);
+        };
+    }, [dangNhap]);
+
+    useEffect(() => {
+        if (!dangNhap) return;
+        let mounted = true;
+        const syncUnreadMessageCount = async () => {
+            try {
+                const payload: any = await userCommerceApi.layDanhSachTroChuyen({
+                    trang: 1,
+                    so_luong: 50,
+                });
+                if (!mounted) return;
+                const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
+                const total = rows.reduce((sum: number, item: any) => sum + Number(item?.so_tin_chua_doc ?? 0), 0);
+                setUnreadMessageCount(total);
+            } catch {
+                if (mounted) setUnreadMessageCount(0);
+            }
+        };
+
+        void syncUnreadMessageCount();
+        const intervalId = window.setInterval(() => {
+            void syncUnreadMessageCount();
+        }, 15000);
+
+        return () => {
+            mounted = false;
+            window.clearInterval(intervalId);
+        };
+    }, [dangNhap]);
+
+    const handleNotificationClick = async (item: NotificationItem) => {
+        const target = resolveNotificationTarget(item);
+        const id = Number(item.id);
+
+        if (Number.isFinite(id) && id > 0 && !item.isRead) {
+            try {
+                await userCommerceApi.danhDauThongBaoDaDoc(id);
+            } catch {
+                // ignore mark-read failures to avoid blocking navigation
+            }
+        }
+
+        setNotifications((current) =>
+            current.map((notification) =>
+                notification.id === item.id
+                    ? { ...notification, isRead: true }
+                    : notification,
+            ),
+        );
+        setUnreadNotificationCount((current) => Math.max(0, current - (item.isRead ? 0 : 1)));
+        setIsNotificationsOpen(false);
+        router.push(target);
+    };
 
     const submitSearch = (query: string) => {
         const trimmedQuery = query.trim();
@@ -179,7 +270,7 @@ export default function Header() {
                     </>
                 )}
 
-                {sanSangHienThiTheoPhien && dangNhap && !isStorePage ? (
+                {sanSangHienThiTheoPhien && dangNhap && nguoiDung?.vai_tro === 'chu_cua_hang' && !isStorePage ? (
                     <Link href="/store" className="ml-2 whitespace-nowrap rounded-full border border-[#ef4444]/15 bg-[#fff1ee] px-5 py-2.5 text-base font-bold text-[#d92d20] transition hover:-translate-y-0.5 hover:bg-[#ffe7e1]">
                         Vào cửa hàng
                     </Link>
@@ -193,12 +284,32 @@ export default function Header() {
 
                 {sanSangHienThiTheoPhien && dangNhap && nguoiDung ? (
                     <div className="ml-3 flex items-center gap-3">
+                        <Link
+                            href="/messages"
+                            className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#eef8ea] text-[#2f6f25] transition hover:-translate-y-0.5"
+                            aria-label="Tin nhắn"
+                        >
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+                            </svg>
+                            {unreadMessageCount > 0 ? (
+                                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ff4d4f] px-1 text-[10px] font-bold text-white">
+                                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                                </span>
+                            ) : null}
+                        </Link>
+
                         <div ref={notificationRef} className="relative">
                             <button type="button" onClick={() => { setIsNotificationsOpen((c) => !c); setIsProfileOpen(false); }}
                                 className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#fff8d9] text-[#f6b600] transition hover:-translate-y-0.5" aria-label="Thông báo">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M12 2a4 4 0 0 0-4 4v1.1A7 7 0 0 0 5 13v4l-2 2v1h18v-1l-2-2v-4a7 7 0 0 0-3-5.9V6a4 4 0 0 0-4-4Zm0 20a3 3 0 0 0 2.83-2H9.17A3 3 0 0 0 12 22Z" />
                                 </svg>
+                                {unreadNotificationCount > 0 ? (
+                                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ff4d4f] px-1 text-[10px] font-bold text-white">
+                                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                                    </span>
+                                ) : null}
                             </button>
 
                             {isNotificationsOpen ? (
@@ -214,7 +325,12 @@ export default function Header() {
                                     <div className="px-6 text-[19px] font-bold text-[#232323]">Trước đó</div>
                                     <div className="max-h-[380px] space-y-1 overflow-y-auto px-3 py-3">
                                         {notifications.slice(0, 3).map((item) => (
-                                            <article key={item.id} className="flex items-center gap-3 rounded-[16px] px-3 py-3 transition hover:bg-[#f8faf7]">
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => void handleNotificationClick(item)}
+                                                className="flex w-full items-center gap-3 rounded-[16px] px-3 py-3 text-left transition hover:bg-[#f8faf7]"
+                                            >
                                                 <div className="relative shrink-0">
                                                     <img src={item.avatar} alt="" className="h-16 w-16 rounded-full object-cover" />
                                                     <NotificationIcon type={item.type} />
@@ -224,7 +340,7 @@ export default function Header() {
                                                     <p className="mt-1 text-[14px] font-semibold text-[#2f6f25]">{item.time}</p>
                                                 </div>
                                                 <span className={`mr-1 h-4 w-4 rounded-full ${item.isRead ? 'bg-[#bfc8b9]' : 'bg-[#2f8f22]'}`} />
-                                            </article>
+                                            </button>
                                         ))}
                                         {notifications.length === 0 ? (
                                             <div className="px-3 py-5 text-center text-sm text-[#70816d]">Chưa có thông báo mới</div>
@@ -258,25 +374,27 @@ export default function Header() {
                             </button>
 
                             {isProfileOpen ? (
-                                <div className="absolute right-0 top-[calc(100%+14px)] z-50 w-[260px] overflow-hidden rounded-[18px] border border-[#e5ebe0] bg-white shadow-[0_22px_40px_rgba(0,0,0,0.12)]">
+                                <div className="absolute right-0 top-[calc(100%+14px)] z-50 w-[320px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[18px] border border-[#e5ebe0] bg-white shadow-[0_22px_40px_rgba(0,0,0,0.12)]">
                                     <div className="border-b border-[#eef2eb] bg-[linear-gradient(135deg,#f6fbf2_0%,#ffffff_100%)] px-5 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f6f1ca] text-[11px] font-bold text-[#4f5b2d]">
-                                                {avatarSrc ? (
-                                                    <img
-                                                        src={avatarSrc}
-                                                        alt={nguoiDung.ten_hien_thi}
-                                                        className="h-full w-full object-cover"
-                                                    />
-                                                ) : (
-                                                    nguoiDung.ten_hien_thi.slice(0, 2).toUpperCase()
-                                                )}
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0 flex items-center gap-3">
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f6f1ca] text-[11px] font-bold text-[#4f5b2d]">
+                                                    {avatarSrc ? (
+                                                        <img
+                                                            src={avatarSrc}
+                                                            alt={nguoiDung.ten_hien_thi}
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        nguoiDung.ten_hien_thi.slice(0, 2).toUpperCase()
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-[17px] font-bold text-[#1d1d1d]">{nguoiDung.ten_hien_thi}</div>
+                                                    <div className="mt-1 truncate text-[14px] text-[#70816d]">@{nguoiDung.ten_dang_nhap}</div>
+                                                </div>
                                             </div>
-                                            <div className="min-w-0">
-                                                <div className="truncate text-[17px] font-bold text-[#1d1d1d]">{nguoiDung.ten_hien_thi}</div>
-                                                <div className="mt-1 text-[14px] text-[#70816d]">@{nguoiDung.ten_dang_nhap}</div>
-                                            </div>
-                                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
                                                 nguoiDung.vai_tro === 'chu_cua_hang' ? 'bg-[#fff1ee] text-[#d92d20]' : 'bg-[#edf7ed] text-[#2f7d32]'
                                             }`}>{vaiTroLabel}</span>
                                         </div>
@@ -286,13 +404,27 @@ export default function Header() {
                                         {nguoiDung.vai_tro === 'chu_cua_hang' ? (
                                             <>
                                                 <Link href="/store-profile" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trang cửa hàng</Link>
-                                                <Link href="/messages/reviewer-1" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Tin nhắn cửa hàng</Link>
+                                                <Link href="/messages" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">
+                                                    Tin nhắn cửa hàng
+                                                    {unreadMessageCount > 0 ? (
+                                                        <span className="ml-2 rounded-full bg-[#ff4d4f] px-2 py-0.5 text-[11px] font-bold text-white">
+                                                            {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                                                        </span>
+                                                    ) : null}
+                                                </Link>
                                                 <Link href="/user/support" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trợ giúp và hỗ trợ</Link>
                                             </>
                                         ) : (
                                             <>
                                                 <Link href="/user/profile" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trang cá nhân</Link>
-                                                <Link href="/messages/reviewer-1" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Tin nhắn</Link>
+                                                <Link href="/messages" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">
+                                                    Tin nhắn
+                                                    {unreadMessageCount > 0 ? (
+                                                        <span className="ml-2 rounded-full bg-[#ff4d4f] px-2 py-0.5 text-[11px] font-bold text-white">
+                                                            {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                                                        </span>
+                                                    ) : null}
+                                                </Link>
                                                 <Link href="/user/orders?menu=placed" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Đơn hàng</Link>
                                                 <Link href="/user/settings" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Cài đặt</Link>
                                                 <Link href="/user/support" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trợ giúp và hỗ trợ</Link>

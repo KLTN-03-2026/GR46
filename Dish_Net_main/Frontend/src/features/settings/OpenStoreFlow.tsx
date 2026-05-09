@@ -229,7 +229,19 @@ export default function OpenStoreFlow({
         return (
             <div>
                 {/* ── Thông tin cơ bản ── */}
-                <h2 className="text-[22px] font-bold text-black">Thông tin cơ bản</h2>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-[#555] transition hover:bg-[#f4f4f4]"
+                        aria-label="Quay lại"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m15 18-6-6 6-6" />
+                        </svg>
+                    </button>
+                    <h2 className="text-[22px] font-bold text-black">Thông tin cơ bản</h2>
+                </div>
                 {existingRequestStatus === 'da_tu_choi' && existingRejectReason ? (
                     <p className="mt-3 rounded-[8px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
                         Lý do từ chối gần nhất: {existingRejectReason}

@@ -32,11 +32,15 @@ export type ProfilePost = {
     date: string;
     content: string;
     images: string[];
+    views?: string;
+    visibility?: 'cong_khai' | 'ban_be';
     likes: string;
     comments: string;
     shares: string;
     sends: string;
     type?: 'bai_viet' | 'video' | 'repost';
+    monetized?: boolean;
+    dishLink?: string | null;
     sharedPost?: {
         id: string;
         author: string;
@@ -45,6 +49,24 @@ export type ProfilePost = {
         images: string[];
     };
 };
+
+function formatCurrencyVnd(value: number) {
+    return `${Math.round(value).toLocaleString('vi-VN')}đ`;
+}
+
+function extractMediaUrls(input: unknown): string[] {
+    if (!Array.isArray(input)) return [];
+    return input
+        .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object' && 'url' in item) {
+                const url = (item as { url?: unknown }).url;
+                return typeof url === 'string' ? url : null;
+            }
+            return null;
+        })
+        .filter((url): url is string => typeof url === 'string' && url.length > 0);
+}
 
 export type ProfileVideo = {
     id: string;
@@ -204,19 +226,22 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
         ]);
 
         const basic = profilePayload?.thong_tin_co_ban ?? {};
+        const monetization = profilePayload?.thong_tin_kiem_tien_noi_dung ?? null;
         const apiPosts = Array.isArray(postPayload?.du_lieu)
             ? postPayload.du_lieu.map((item: any) => ({
                 id: String(item.id),
                 date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
                 content: String(item.noi_dung ?? ''),
-                images: Array.isArray(item.tep_dinh_kem)
-                    ? item.tep_dinh_kem.filter((image: unknown): image is string => typeof image === 'string')
-                    : [],
+                images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0),
+                visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
                 likes: String(item.tong_luot_thich ?? 0),
                 comments: String(item.tong_luot_binh_luan ?? 0),
                 shares: String(item.tong_luot_chia_se ?? 0),
                 sends: '0',
                 type: item.loai_bai_viet ?? 'bai_viet',
+                monetized: Boolean(item.bat_kiem_tien),
+                dishLink: item.link_mon_an ?? null,
             }))
             : [];
         const apiReposts = Array.isArray(repostPayload?.du_lieu)
@@ -224,9 +249,9 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
                 id: String(item.id),
                 date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
                 content: String(item.noi_dung ?? ''),
-                images: Array.isArray(item.tep_dinh_kem)
-                    ? item.tep_dinh_kem.filter((image: unknown): image is string => typeof image === 'string')
-                    : [],
+                images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0),
+                visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
                 likes: String(item.tong_luot_thich ?? 0),
                 comments: String(item.tong_luot_binh_luan ?? 0),
                 shares: String(item.tong_luot_chia_se ?? 0),
@@ -238,9 +263,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
                         author: String(item.bai_viet_goc?.thong_tin_nguoi_dang?.ten_hien_thi ?? 'Người dùng'),
                         date: item.bai_viet_goc?.ngay_dang ? new Date(item.bai_viet_goc.ngay_dang).toLocaleDateString('vi-VN') : '',
                         content: String(item.bai_viet_goc?.noi_dung ?? ''),
-                        images: Array.isArray(item.bai_viet_goc?.tep_dinh_kem)
-                            ? item.bai_viet_goc.tep_dinh_kem.filter((image: unknown): image is string => typeof image === 'string')
-                            : [],
+                        images: extractMediaUrls(item.bai_viet_goc?.tep_dinh_kem),
                     }
                     : undefined,
             }))
@@ -248,10 +271,62 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
         const apiVideos = Array.isArray(videoPayload?.du_lieu)
             ? videoPayload.du_lieu.map((item: any) => ({
                 id: String(item.id),
-                image: (Array.isArray(item.tep_dinh_kem) ? item.tep_dinh_kem[0] : null) || DEFAULT_AVATAR,
+                image: (extractMediaUrls(item.tep_dinh_kem)[0] ?? null) || DEFAULT_AVATAR,
                 views: String(item.tong_luot_thich ?? 0),
             }))
             : [];
+
+        const earnings: EarningsProfile = monetization
+            ? {
+                todayRevenue: formatCurrencyVnd(Number(monetization?.thong_ke?.doanh_thu_hom_nay ?? 0)),
+                todayRevenueDelta: `+${Number(monetization?.thong_ke?.luot_nhan_link_hom_nay ?? 0)} lượt nhấn link`,
+                totalMonetizedPosts: String(Number(monetization?.thong_ke?.tong_bai_kiem_tien ?? 0)),
+                totalMonetizedPostsDelta: 'Đang kiếm tiền',
+                linkClickRate: `${Number(monetization?.thong_ke?.ty_le_nhan_link ?? 0).toFixed(2)}%`,
+                linkClickRateDelta: `${Number(monetization?.thong_ke?.tong_luot_nhan_link ?? 0)} lượt nhấn`,
+                totalRevenue: formatCurrencyVnd(Number(monetization?.thong_ke?.tong_doanh_thu_tich_luy ?? 0)),
+                withdrawSummary: {
+                    availableBalance: formatCurrencyVnd(Number(monetization?.tong_quan_rut_tien?.so_du_kha_dung ?? 0)),
+                    processingAmount: formatCurrencyVnd(Number(monetization?.tong_quan_rut_tien?.so_tien_dang_xu_ly ?? 0)),
+                    totalWithdrawn: formatCurrencyVnd(Number(monetization?.tong_quan_rut_tien?.tong_da_rut_thanh_cong ?? 0)),
+                },
+                items: apiPosts
+                    .filter((post: any) => post.monetized)
+                    .map((post: any) => ({
+                        id: post.id,
+                        title: post.content ? post.content.slice(0, 50) : 'Bài viết kiếm tiền',
+                        image: post.images[0] ?? DEFAULT_AVATAR,
+                        views: String(post.views ?? '0'),
+                        interactions: String(Number(post.likes) + Number(post.comments) + Number(post.shares)),
+                        revenue: '0đ',
+                        publishedAt: post.date,
+                        status: 'earning' as const,
+                    })),
+                withdrawalAccounts: Array.isArray(monetization?.tai_khoan_rut_tien)
+                    ? monetization.tai_khoan_rut_tien.map((acc: any) => ({
+                        id: String(acc.id),
+                        provider: String(acc.ten_ngan_hang ?? 'Ngân hàng'),
+                        accountNumber: String(acc.so_tai_khoan ?? ''),
+                        accountName: String(acc.ten_chu_tai_khoan ?? ''),
+                        kind: 'bank' as const,
+                    }))
+                    : [],
+                withdrawalHistory: Array.isArray(monetization?.lich_su_rut_tien)
+                    ? monetization.lich_su_rut_tien.map((item: any) => ({
+                        id: String(item.id),
+                        date: item.thoi_gian_yeu_cau ? new Date(item.thoi_gian_yeu_cau).toLocaleDateString('vi-VN') : '',
+                        amount: formatCurrencyVnd(Number(item.so_tien ?? 0)),
+                        method: 'Chuyển khoản ngân hàng',
+                        status:
+                            item.trang_thai === 'da_hoan_thanh'
+                                ? 'completed'
+                                : item.trang_thai === 'bi_tu_choi'
+                                    ? 'rejected'
+                                    : 'processing',
+                    }))
+                    : [],
+            }
+            : EMPTY_EARNINGS;
 
         return {
             id: String(me.id),
@@ -272,11 +347,11 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
             showBadge: Boolean(editPayload?.cho_hien_thi_huy_hieu),
             showTrustScore: Boolean(editPayload?.cho_hien_thi_diem_uy_tin),
             isPrivate: Boolean(editPayload?.la_tai_khoan_rieng_tu),
-            isMonetized: false,
+            isMonetized: Boolean(monetization),
             posts: apiPosts,
             reposts: apiReposts,
             videos: apiVideos,
-            earnings: EMPTY_EARNINGS,
+            earnings,
         };
     } catch {
         return emptyProfileFromAuth(me);

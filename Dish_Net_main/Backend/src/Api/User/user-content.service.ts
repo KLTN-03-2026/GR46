@@ -19,9 +19,14 @@ import { KhuyenMaiEntity } from '../Admin/entities/khuyen-mai.entity';
 import { BinhLuanEntity } from '../Admin/entities/binh-luan.entity';
 import { BaoCaoEntity } from '../Admin/entities/bao-cao.entity';
 import { TuongTacEntity } from '../Admin/entities/tuong-tac.entity';
+import { YeuCauNangCapEntity } from '../Admin/entities/yeu-cau-nang-cap.entity';
 import { DanhGiaDaLuuEntity } from './entities/danh-gia-da-luu.entity';
 import { QuanHeNguoiDungEntity } from './entities/quan-he-nguoi-dung.entity';
 import { CuocTroChuyenEntity } from './entities/cuoc-tro-chuyen.entity';
+import { TaiKhoanRutTienEntity } from './entities/tai-khoan-rut-tien.entity';
+import { YeuCauRutTienEntity } from './entities/yeu-cau-rut-tien.entity';
+import { LuotNhanLinkBaiVietEntity } from './entities/luot-nhan-link-bai-viet.entity';
+import { LuotXemBaiVietEntity } from './entities/luot-xem-bai-viet.entity';
 import {
   BangXepHangChiTietQueryDto,
   BangXepHangMiniQueryDto,
@@ -31,6 +36,8 @@ import {
   KhamPhaQueryDto,
   MonTheoDanhMucQueryDto,
   NoiDungTrangCaNhanQueryDto,
+  ChiaSeBaiVietDto,
+  TaoBaiVietDto,
   TimKiemQueryDto,
 } from './dto/user-content.dto';
 
@@ -61,12 +68,22 @@ export class UserContentService {
     private readonly baoCaoRepo: Repository<BaoCaoEntity>,
     @InjectRepository(TuongTacEntity)
     private readonly tuongTacRepo: Repository<TuongTacEntity>,
+    @InjectRepository(YeuCauNangCapEntity)
+    private readonly yeuCauNangCapRepo: Repository<YeuCauNangCapEntity>,
     @InjectRepository(DanhGiaDaLuuEntity)
     private readonly danhGiaDaLuuRepo: Repository<DanhGiaDaLuuEntity>,
     @InjectRepository(QuanHeNguoiDungEntity)
     private readonly quanHeNguoiDungRepo: Repository<QuanHeNguoiDungEntity>,
     @InjectRepository(CuocTroChuyenEntity)
     private readonly cuocTroChuyenRepo: Repository<CuocTroChuyenEntity>,
+    @InjectRepository(TaiKhoanRutTienEntity)
+    private readonly taiKhoanRutTienRepo: Repository<TaiKhoanRutTienEntity>,
+    @InjectRepository(YeuCauRutTienEntity)
+    private readonly yeuCauRutTienRepo: Repository<YeuCauRutTienEntity>,
+    @InjectRepository(LuotNhanLinkBaiVietEntity)
+    private readonly luotNhanLinkBaiVietRepo: Repository<LuotNhanLinkBaiVietEntity>,
+    @InjectRepository(LuotXemBaiVietEntity)
+    private readonly luotXemBaiVietRepo: Repository<LuotXemBaiVietEntity>,
   ) {}
 
   private parsePaging(trang?: number, soLuong?: number) {
@@ -88,6 +105,28 @@ export class UserContentService {
       .toString()
       .padStart(4, '0');
     return `${prefix}${y}${m}${d}${h}${i}${s}${rand}`;
+  }
+
+  private parseMonAnIdTuLink(link: string): number | null {
+    const trimmed = (link || '').trim();
+    if (!trimmed) return null;
+
+    const tuQuery = (() => {
+      try {
+        const url = new URL(trimmed, 'https://dishnet.local');
+        const direct = Number(url.searchParams.get('id_mon_an') || url.searchParams.get('id') || 0);
+        if (Number.isFinite(direct) && direct > 0) return direct;
+      } catch {
+        return null;
+      }
+      return null;
+    })();
+    if (tuQuery) return tuQuery;
+
+    const match = trimmed.match(/(?:mon-an|food|dish)\/(\d+)(?:[/?#]|$)/i);
+    if (!match) return null;
+    const id = Number(match[1]);
+    return Number.isFinite(id) && id > 0 ? id : null;
   }
 
   private tinhKhoangCachKmExpr(alias: string): string {
@@ -476,6 +515,10 @@ export class UserContentService {
       .createQueryBuilder('bv')
       .innerJoin(NguoiDungEntity, 'nd', 'nd.id = bv.id_nguoi_dang')
       .leftJoin(CuaHangEntity, 'ch', 'ch.id = bv.id_cua_hang')
+      .addSelect('nd.id', 'nd_id')
+      .addSelect('nd.ten_hien_thi', 'nd_ten_hien_thi')
+      .addSelect('nd.ten_dang_nhap', 'nd_ten_dang_nhap')
+      .addSelect('nd.anh_dai_dien', 'nd_anh_dai_dien')
       .where('bv.trang_thai_duyet = :trangThai', { trangThai: 'hien_thi' })
       .andWhere('bv.muc_do_hien_thi = :mucDoHienThi', {
         mucDoHienThi: 'cong_khai',
@@ -517,14 +560,15 @@ export class UserContentService {
 
     qb.addOrderBy('bv.ngay_dang', 'DESC').skip(skip).take(take);
 
-    const [items, tongSo] = await qb.getManyAndCount();
+    const { entities: items, raw: rawItems } = await qb.getRawAndEntities();
+    const tongSo = await qb.getCount();
 
     const postIds = items.map((item) => Number(item.id));
     const mediaByPost = await this.mapMediaByObject('bai_viet', postIds);
     const originalMap = await this.buildBaiVietGocMap(items as Array<{ id_bai_viet_goc?: number | null }>);
 
     return {
-      du_lieu: items.map((item) => ({
+      du_lieu: items.map((item, index) => ({
         id: Number(item.id),
         loai_bai_viet: item.loai_bai_viet,
         noi_dung: item.noi_dung,
@@ -535,6 +579,10 @@ export class UserContentService {
         tong_luot_luu: Number(item.tong_luot_luu),
         ngay_dang: item.ngay_dang,
         tep_dinh_kem: mediaByPost.get(Number(item.id)) ?? [],
+        id_nguoi_dang: rawItems[index]?.nd_id != null ? Number(rawItems[index].nd_id) : null,
+        ten_nguoi_dang: rawItems[index]?.nd_ten_hien_thi ?? null,
+        ten_dang_nhap: rawItems[index]?.nd_ten_dang_nhap ?? null,
+        anh_dai_dien: rawItems[index]?.nd_anh_dai_dien ?? null,
         id_bai_viet_goc:
           item.id_bai_viet_goc != null ? Number(item.id_bai_viet_goc) : null,
         bai_viet_goc:
@@ -652,6 +700,7 @@ export class UserContentService {
       },
       du_lieu: items.map((item) => ({
         id: Number(item.id),
+        id_nguoi_dung: item.an_danh ? null : (Number(item.nguoi_danh_gia?.id) || null),
         ten_nguoi_danh_gia: item.an_danh
           ? 'Người dùng ẩn danh'
           : item.nguoi_danh_gia?.ten_hien_thi ?? 'Người dùng',
@@ -867,6 +916,141 @@ export class UserContentService {
       }),
     ]);
 
+    let thongTinKiemTien: unknown = null;
+    if (isOwner && (user.la_nha_sang_tao || user.trang_thai_kiem_tien_noi_dung === 'da_duyet')) {
+      const [tongHoaHongRaw, homNayHoaHongRaw, monetizedPosts, clicksTodayRaw, clicksTotalRaw, payoutAccounts, withdrawalRows] = await Promise.all([
+        this.donHangRepo
+          .createQueryBuilder('dh')
+          .select('COALESCE(SUM(dh.hoa_hong_nha_sang_tao), 0)', 'total')
+          .where('dh.id_nha_sang_tao_nguon = :userId', { userId: idNguoiDung })
+          .andWhere('dh.trang_thai_don_hang = :status', { status: 'da_giao' })
+          .getRawOne<{ total: string }>(),
+        this.donHangRepo
+          .createQueryBuilder('dh')
+          .select('COALESCE(SUM(dh.hoa_hong_nha_sang_tao), 0)', 'total')
+          .where('dh.id_nha_sang_tao_nguon = :userId', { userId: idNguoiDung })
+          .andWhere('dh.trang_thai_don_hang = :status', { status: 'da_giao' })
+          .andWhere('DATE(dh.thoi_gian_hoan_tat) = CURDATE()')
+          .getRawOne<{ total: string }>(),
+        this.baiVietRepo.find({
+          where: { id_nguoi_dang: idNguoiDung, bat_kiem_tien: true, trang_thai_duyet: 'hien_thi' },
+          order: { ngay_dang: 'DESC', id: 'DESC' },
+          take: 50,
+        }),
+        this.luotNhanLinkBaiVietRepo
+          .createQueryBuilder('ln')
+          .innerJoin(BaiVietEntity, 'bv', 'bv.id = ln.id_bai_viet')
+          .select('COUNT(ln.id)', 'total')
+          .where('bv.id_nguoi_dang = :userId', { userId: idNguoiDung })
+          .andWhere('DATE(ln.ngay_tao) = CURDATE()')
+          .getRawOne<{ total: string }>(),
+        this.luotNhanLinkBaiVietRepo
+          .createQueryBuilder('ln')
+          .innerJoin(BaiVietEntity, 'bv', 'bv.id = ln.id_bai_viet')
+          .select('COUNT(ln.id)', 'total')
+          .where('bv.id_nguoi_dang = :userId', { userId: idNguoiDung })
+          .getRawOne<{ total: string }>(),
+        this.taiKhoanRutTienRepo.find({
+          where: { id_nguoi_dung: idNguoiDung, trang_thai: 'hieu_luc' },
+          order: { la_mac_dinh: 'DESC', id: 'DESC' },
+        }),
+        this.yeuCauRutTienRepo.find({
+          where: { id_nguoi_dung: idNguoiDung },
+          order: { thoi_gian_yeu_cau: 'DESC', id: 'DESC' },
+          take: 50,
+        }),
+      ]);
+
+      let payoutAccountsResolved = payoutAccounts;
+      if (payoutAccountsResolved.length === 0) {
+        const latestApproved = await this.yeuCauNangCapRepo.findOne({
+          where: {
+            id_nguoi_gui: idNguoiDung,
+            loai_yeu_cau: 'kiem_tien_noi_dung',
+            trang_thai: 'da_duyet',
+          },
+          order: { thoi_gian_xu_ly: 'DESC', id: 'DESC' },
+        });
+        if (latestApproved?.ly_do_yeu_cau) {
+          try {
+            const parsed = JSON.parse(latestApproved.ly_do_yeu_cau) as {
+              ngan_hang?: string;
+              so_tai_khoan_ngan_hang?: string;
+              ten_tai_khoan?: string;
+            };
+            if (parsed.ngan_hang && parsed.so_tai_khoan_ngan_hang) {
+              const created = await this.taiKhoanRutTienRepo.save({
+                id_nguoi_dung: idNguoiDung,
+                ten_ngan_hang: parsed.ngan_hang,
+                so_tai_khoan: parsed.so_tai_khoan_ngan_hang,
+                ten_chu_tai_khoan: parsed.ten_tai_khoan || user.ten_hien_thi || 'Người dùng',
+                la_mac_dinh: true,
+                trang_thai: 'hieu_luc',
+                ngay_tao: new Date(),
+                ngay_cap_nhat: new Date(),
+              });
+              payoutAccountsResolved = [created];
+            }
+          } catch {
+            // Ignore malformed legacy payload; user can add account later.
+          }
+        }
+      }
+
+      const tongHoaHong = Number(tongHoaHongRaw?.total ?? 0);
+      const hoaHongHomNay = Number(homNayHoaHongRaw?.total ?? 0);
+      const tongLuotNhanLink = Number(clicksTotalRaw?.total ?? 0);
+      const luotNhanLinkHomNay = Number(clicksTodayRaw?.total ?? 0);
+      const tongLuotXemMonetized = monetizedPosts.reduce(
+        (sum, item) => sum + Number(item.tong_luot_xem ?? 0),
+        0,
+      );
+      const ctr = tongLuotXemMonetized > 0
+        ? (tongLuotNhanLink / tongLuotXemMonetized) * 100
+        : 0;
+
+      const dangXuLy = withdrawalRows
+        .filter((item) => item.trang_thai === 'dang_xu_ly')
+        .reduce((sum, item) => sum + Number(item.so_tien), 0);
+      const daRutThanhCong = withdrawalRows
+        .filter((item) => item.trang_thai === 'da_hoan_thanh')
+        .reduce((sum, item) => sum + Number(item.so_tien), 0);
+      const soDuKhaDung = Math.max(0, tongHoaHong - dangXuLy - daRutThanhCong);
+
+      thongTinKiemTien = {
+        trang_thai_kiem_tien: user.trang_thai_kiem_tien_noi_dung || (user.la_nha_sang_tao ? 'da_duyet' : 'chua_dang_ky'),
+        thong_ke: {
+          doanh_thu_hom_nay: hoaHongHomNay,
+          tong_bai_kiem_tien: monetizedPosts.length,
+          ty_le_nhan_link: Number(ctr.toFixed(2)),
+          tong_doanh_thu_tich_luy: tongHoaHong,
+          luot_nhan_link_hom_nay: luotNhanLinkHomNay,
+          tong_luot_nhan_link: tongLuotNhanLink,
+        },
+        tong_quan_rut_tien: {
+          so_du_kha_dung: soDuKhaDung,
+          so_tien_dang_xu_ly: dangXuLy,
+          tong_da_rut_thanh_cong: daRutThanhCong,
+        },
+        tai_khoan_rut_tien: payoutAccountsResolved.map((acc) => ({
+          id: Number(acc.id),
+          ten_ngan_hang: acc.ten_ngan_hang,
+          so_tai_khoan: acc.so_tai_khoan,
+          ten_chu_tai_khoan: acc.ten_chu_tai_khoan,
+          la_mac_dinh: Boolean(acc.la_mac_dinh),
+        })),
+        lich_su_rut_tien: withdrawalRows.map((row) => ({
+          id: Number(row.id),
+          ma_yeu_cau: row.ma_yeu_cau,
+          so_tien: Number(row.so_tien),
+          trang_thai: row.trang_thai,
+          ly_do_tu_choi: row.ly_do_tu_choi,
+          thoi_gian_yeu_cau: row.thoi_gian_yeu_cau,
+          thoi_gian_xu_ly: row.thoi_gian_xu_ly,
+        })),
+      };
+    }
+
     return {
       thong_tin_co_ban: {
         id: Number(user.id),
@@ -880,6 +1064,7 @@ export class UserContentService {
         la_tai_khoan_rieng_tu: Boolean(user.la_tai_khoan_rieng_tu),
         noi_dung_bi_han_che: biHanCheDoRiengTu,
       },
+      thong_tin_kiem_tien_noi_dung: thongTinKiemTien,
       tabs: [
         { key: 'bai_viet', label: 'Bài viết' },
         { key: 'video', label: 'Video' },
@@ -967,6 +1152,10 @@ export class UserContentService {
         id: Number(item.id),
         loai_bai_viet: item.loai_bai_viet,
         noi_dung: item.noi_dung,
+        muc_do_hien_thi: item.muc_do_hien_thi,
+        bat_kiem_tien: Boolean(item.bat_kiem_tien),
+        link_mon_an: item.link_mon_an,
+        id_mon_an: item.id_mon_an != null ? Number(item.id_mon_an) : null,
         tong_luot_thich: Number(item.tong_luot_thich),
         tong_luot_binh_luan: Number(item.tong_luot_binh_luan),
         tong_luot_chia_se: Number(item.tong_luot_chia_se),
@@ -1536,6 +1725,76 @@ export class UserContentService {
     return { dang_theo_doi: true, hanh_dong: 'theo_doi' };
   }
 
+  async layDanhSachDangTheoDoi(idNguoiXem: number, keyword?: string) {
+    const qb = this.quanHeNguoiDungRepo
+      .createQueryBuilder('qh')
+      .innerJoin(NguoiDungEntity, 'nd', 'nd.id = qh.id_nguoi_nhan_quan_he')
+      .where('qh.id_nguoi_tao_quan_he = :idNguoiXem', { idNguoiXem })
+      .andWhere('qh.loai_quan_he = :loai', { loai: 'theo_doi' })
+      .andWhere('qh.trang_thai = :trangThai', { trangThai: 'hieu_luc' })
+      .addSelect('nd.id', 'nd_id')
+      .addSelect('nd.ten_hien_thi', 'nd_ten_hien_thi')
+      .addSelect('nd.ten_dang_nhap', 'nd_ten_dang_nhap')
+      .addSelect('nd.anh_dai_dien', 'nd_anh_dai_dien')
+      .orderBy('qh.ngay_tao', 'DESC');
+
+    if (keyword) {
+      qb.andWhere(
+        '(nd.ten_hien_thi LIKE :kw OR nd.ten_dang_nhap LIKE :kw)',
+        { kw: `%${keyword}%` },
+      );
+    }
+
+    const raw = await qb.getRawMany();
+    return raw.map((r) => ({
+      id: Number(r.nd_id),
+      ten_hien_thi: r.nd_ten_hien_thi ?? '',
+      ten_dang_nhap: r.nd_ten_dang_nhap ?? '',
+      anh_dai_dien: r.nd_anh_dai_dien ?? null,
+    }));
+  }
+
+  async layDanhSachNguoiTheoDoi(idNguoiXem: number, keyword?: string) {
+    const qb = this.quanHeNguoiDungRepo
+      .createQueryBuilder('qh')
+      .innerJoin(NguoiDungEntity, 'nd', 'nd.id = qh.id_nguoi_tao_quan_he')
+      .where('qh.id_nguoi_nhan_quan_he = :idNguoiXem', { idNguoiXem })
+      .andWhere('qh.loai_quan_he = :loai', { loai: 'theo_doi' })
+      .andWhere('qh.trang_thai = :trangThai', { trangThai: 'hieu_luc' })
+      .addSelect('nd.id', 'nd_id')
+      .addSelect('nd.ten_hien_thi', 'nd_ten_hien_thi')
+      .addSelect('nd.ten_dang_nhap', 'nd_ten_dang_nhap')
+      .addSelect('nd.anh_dai_dien', 'nd_anh_dai_dien')
+      .orderBy('qh.ngay_tao', 'DESC');
+
+    if (keyword) {
+      qb.andWhere(
+        '(nd.ten_hien_thi LIKE :kw OR nd.ten_dang_nhap LIKE :kw)',
+        { kw: `%${keyword}%` },
+      );
+    }
+
+    const raw = await qb.getRawMany();
+    return raw.map((r) => ({
+      id: Number(r.nd_id),
+      ten_hien_thi: r.nd_ten_hien_thi ?? '',
+      ten_dang_nhap: r.nd_ten_dang_nhap ?? '',
+      anh_dai_dien: r.nd_anh_dai_dien ?? null,
+    }));
+  }
+
+  async xoaNguoiTheoDoi(idNguoiTheoDoi: number, idChuSoHuu: number) {
+    if (idNguoiTheoDoi === idChuSoHuu) {
+      throw new BadRequestException('Không thể xóa chính mình');
+    }
+    await this.quanHeNguoiDungRepo.delete({
+      id_nguoi_tao_quan_he: idNguoiTheoDoi,
+      id_nguoi_nhan_quan_he: idChuSoHuu,
+      loai_quan_he: 'theo_doi',
+    });
+    return { thanh_cong: true };
+  }
+
   async toggleChanNguoiDung(idNguoiDung: number, idNguoiXem: number) {
     if (idNguoiDung === idNguoiXem) {
       throw new BadRequestException('Không thể chặn chính mình');
@@ -1809,6 +2068,39 @@ export class UserContentService {
     };
   }
 
+  async layChiTietCuaHang(idCuaHang: number) {
+    const id = Number(idCuaHang);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException('ID cửa hàng không hợp lệ');
+    }
+
+    const cuaHang = await this.cuaHangRepo.findOne({
+      where: { id, trang_thai_hoat_dong: 'hoat_dong' },
+    });
+
+    if (!cuaHang) {
+      throw new NotFoundException('Không tìm thấy cửa hàng');
+    }
+
+    return {
+      id: Number(cuaHang.id),
+      ten_cua_hang: cuaHang.ten_cua_hang,
+      slug: cuaHang.slug,
+      mo_ta: cuaHang.mo_ta,
+      anh_dai_dien: cuaHang.anh_dai_dien,
+      dia_chi: cuaHang.dia_chi_kinh_doanh,
+      khu_vuc: cuaHang.khu_vuc,
+      diem_danh_gia: Number(cuaHang.diem_danh_gia || 0),
+      tong_don_hang: Number(cuaHang.tong_don_hang || 0),
+      tong_luot_xem: Number(cuaHang.tong_luot_xem || 0),
+      tong_luot_thich: Number(cuaHang.tong_luot_thich || 0),
+      gio_mo_cua: cuaHang.gio_mo_cua,
+      gio_dong_cua: cuaHang.gio_dong_cua,
+      vi_do: cuaHang.vi_do != null ? Number(cuaHang.vi_do) : null,
+      kinh_do: cuaHang.kinh_do != null ? Number(cuaHang.kinh_do) : null,
+    };
+  }
+
   async layMonTheoDanhMuc(idDanhMuc: number, query: MonTheoDanhMucQueryDto) {
     const danhMuc = await this.danhMucMonRepo.findOne({ where: { id: idDanhMuc } });
     if (!danhMuc || danhMuc.trang_thai !== 'hieu_luc') {
@@ -1875,9 +2167,15 @@ export class UserContentService {
     const [baiVietItems, tongSoBaiViet] = await this.baiVietRepo
       .createQueryBuilder('bv')
       .where('bv.trang_thai_duyet = :trangThai', { trangThai: 'hien_thi' })
-      .andWhere('bv.muc_do_hien_thi = :mucDoHienThi', {
-        mucDoHienThi: 'cong_khai',
-      })
+      .andWhere(
+        idNguoiDung
+          ? '(bv.muc_do_hien_thi = :mucDoHienThi OR bv.id_nguoi_dang = :idNguoiDung)'
+          : 'bv.muc_do_hien_thi = :mucDoHienThi',
+        {
+          mucDoHienThi: 'cong_khai',
+          idNguoiDung,
+        },
+      )
       .orderBy('bv.ngay_dang', 'DESC')
       .addOrderBy('bv.id', 'DESC')
       .skip(skip)
@@ -2000,6 +2298,9 @@ export class UserContentService {
           loai_bai_viet: item.loai_bai_viet,
           noi_dung: item.noi_dung,
           so_sao: item.so_sao != null ? Number(item.so_sao) : null,
+          bat_kiem_tien: Boolean(item.bat_kiem_tien),
+          link_mon_an: item.link_mon_an,
+          id_mon_an: item.id_mon_an != null ? Number(item.id_mon_an) : null,
           ngay_dang: item.ngay_dang,
           thong_tin_nguoi_dang: {
             id: tacGia ? Number(tacGia.id) : Number(item.id_nguoi_dang),
@@ -2075,16 +2376,50 @@ export class UserContentService {
     };
   }
 
-  async layChiTietBaiViet(idBaiViet: number) {
+  async layChiTietBaiViet(idBaiViet: number, idNguoiXem?: number) {
     const baiViet = await this.baiVietRepo.findOne({
       where: {
         id: idBaiViet,
         trang_thai_duyet: 'hien_thi',
-        muc_do_hien_thi: 'cong_khai',
       },
     });
     if (!baiViet) {
       throw new NotFoundException('Bài viết không tồn tại');
+    }
+
+    const { isOwner, isFollower } = await this.layQuyenXemTrangCaNhan(
+      Number(baiViet.id_nguoi_dang),
+      idNguoiXem,
+    );
+    const coQuyenXem =
+      isOwner ||
+      baiViet.muc_do_hien_thi === 'cong_khai' ||
+      (isFollower && baiViet.muc_do_hien_thi === 'nguoi_theo_doi');
+    if (!coQuyenXem) {
+      throw new NotFoundException('Bài viết không tồn tại');
+    }
+
+    const laChuBai = idNguoiXem != null && Number(idNguoiXem) === Number(baiViet.id_nguoi_dang);
+    if (idNguoiXem != null && !laChuBai) {
+      const insertResult = await this.luotXemBaiVietRepo
+        .createQueryBuilder()
+        .insert()
+        .values({
+          id_bai_viet: idBaiViet,
+          id_nguoi_dung: idNguoiXem,
+          ngay_tao: new Date(),
+        })
+        .orIgnore()
+        .execute();
+      const soDongChen = Number(
+        (insertResult.raw as { affectedRows?: number; affected?: number })?.affectedRows ??
+          (insertResult.raw as { affectedRows?: number; affected?: number })?.affected ??
+          0,
+      );
+      if (soDongChen > 0) {
+        await this.baiVietRepo.increment({ id: idBaiViet }, 'tong_luot_xem', 1);
+        baiViet.tong_luot_xem = Number(baiViet.tong_luot_xem || 0) + 1;
+      }
     }
 
     const [tacGia, cuaHang, mediaByPost, originalMap] = await Promise.all([
@@ -2114,11 +2449,13 @@ export class UserContentService {
           }
         : null,
       tong_tuong_tac: {
+        luot_xem: Number(baiViet.tong_luot_xem),
         luot_thich: Number(baiViet.tong_luot_thich),
         luot_binh_luan: Number(baiViet.tong_luot_binh_luan),
         luot_chia_se: Number(baiViet.tong_luot_chia_se),
         luot_luu: Number(baiViet.tong_luot_luu),
       },
+      tong_luot_xem: Number(baiViet.tong_luot_xem),
       tep_dinh_kem: mediaByPost.get(idBaiViet) ?? [],
       id_bai_viet_goc:
         baiViet.id_bai_viet_goc != null ? Number(baiViet.id_bai_viet_goc) : null,
@@ -2273,6 +2610,58 @@ export class UserContentService {
     });
   }
 
+  async toggleThichBinhLuan(idBinhLuan: number, idNguoiDung: number) {
+    const binhLuan = await this.binhLuanRepo.findOne({
+      where: { id: idBinhLuan, trang_thai: 'hien_thi' },
+    });
+    if (!binhLuan) {
+      throw new NotFoundException('Bình luận không tồn tại hoặc không khả dụng');
+    }
+
+    const existed = await this.tuongTacRepo.findOne({
+      where: {
+        id_nguoi_dung: idNguoiDung,
+        id_binh_luan: idBinhLuan,
+        loai_tuong_tac: 'thich',
+      },
+    });
+
+    if (existed) {
+      await this.tuongTacRepo.delete({ id: existed.id });
+      await this.binhLuanRepo
+        .createQueryBuilder()
+        .update(BinhLuanEntity)
+        .set({
+          tong_luot_thich: () => 'GREATEST(tong_luot_thich - 1, 0)',
+        })
+        .where('id = :idBinhLuan', { idBinhLuan })
+        .execute();
+
+      const refreshed = await this.binhLuanRepo.findOne({ where: { id: idBinhLuan } });
+      return {
+        da_tuong_tac: false,
+        hanh_dong: 'bo_tuong_tac',
+        tong_luot: Number(refreshed?.tong_luot_thich ?? 0),
+      };
+    }
+
+    await this.tuongTacRepo.save({
+      id_nguoi_dung: idNguoiDung,
+      id_bai_viet: null,
+      id_binh_luan: idBinhLuan,
+      loai_tuong_tac: 'thich',
+      ngay_tao: new Date(),
+    });
+    await this.binhLuanRepo.increment({ id: idBinhLuan }, 'tong_luot_thich', 1);
+
+    const refreshed = await this.binhLuanRepo.findOne({ where: { id: idBinhLuan } });
+    return {
+      da_tuong_tac: true,
+      hanh_dong: 'tao_tuong_tac',
+      tong_luot: Number(refreshed?.tong_luot_thich ?? 0),
+    };
+  }
+
   async toggleLuuBaiViet(idBaiViet: number, idNguoiDung: number) {
     return this.toggleInteraction({
       idBaiViet,
@@ -2283,7 +2672,11 @@ export class UserContentService {
     });
   }
 
-  async chiaSeBaiViet(idBaiViet: number, idNguoiDung: number) {
+  async chiaSeBaiViet(
+    idBaiViet: number,
+    idNguoiDung: number,
+    dto?: ChiaSeBaiVietDto,
+  ) {
     const baiViet = await this.baiVietRepo.findOne({
       where: {
         id: idBaiViet,
@@ -2325,7 +2718,7 @@ export class UserContentService {
       id_don_hang: baiViet.id_don_hang,
       noi_dung: `Đã chia sẻ bài viết #${idBaiViet}`,
       so_sao: null,
-      muc_do_hien_thi: 'cong_khai',
+      muc_do_hien_thi: dto?.muc_do_hien_thi ?? 'cong_khai',
       trang_thai_duyet: 'hien_thi',
       tong_luot_xem: 0,
       tong_luot_thich: 0,
@@ -2439,6 +2832,36 @@ export class UserContentService {
     };
   }
 
+  async nhanLinkMon(
+    idBaiViet: number,
+    idNguoiDung?: number,
+    diaChiIp?: string | null,
+    userAgent?: string | null,
+  ) {
+    const baiViet = await this.baiVietRepo.findOne({
+      where: {
+        id: idBaiViet,
+        trang_thai_duyet: 'hien_thi',
+      },
+    });
+    if (!baiViet || !baiViet.bat_kiem_tien || !baiViet.link_mon_an) {
+      throw new NotFoundException('Link món không khả dụng');
+    }
+
+    await this.luotNhanLinkBaiVietRepo.save({
+      id_bai_viet: idBaiViet,
+      id_nguoi_dung: idNguoiDung ?? null,
+      dia_chi_ip: diaChiIp || null,
+      user_agent: userAgent || null,
+      ngay_tao: new Date(),
+    });
+
+    return {
+      url: baiViet.link_mon_an,
+      id_mon_an: baiViet.id_mon_an != null ? Number(baiViet.id_mon_an) : null,
+    };
+  }
+
   async baoCaoBaiViet(
     idBaiViet: number,
     idNguoiBaoCao: number,
@@ -2480,6 +2903,250 @@ export class UserContentService {
       trang_thai: record.trang_thai,
       thoi_gian_bao_cao: record.thoi_gian_bao_cao,
     };
+  }
+
+  async taoBaiViet(idNguoiDung: number, dto: TaoBaiVietDto) {
+    const user = await this.nguoiDungRepo.findOne({ where: { id: idNguoiDung } });
+    if (!user) {
+      throw new NotFoundException('Người dùng không tồn tại');
+    }
+
+    const noiDung = dto.noi_dung?.trim() ?? '';
+    const tepDinhKem = (dto.tep_dinh_kem ?? []).map((url) => url.trim()).filter(Boolean);
+    if (!noiDung && tepDinhKem.length === 0) {
+      throw new BadRequestException('Vui lòng nhập nội dung hoặc thêm phương tiện');
+    }
+
+    const choPhep = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp4', 'mov', 'avi', 'mkv']);
+    tepDinhKem.forEach((url) => {
+      const ext = this.layPhanMoRongTep(url);
+      if (!choPhep.has(ext)) {
+        throw new BadRequestException(`Tệp đính kèm có định dạng không hợp lệ: ${url}`);
+      }
+    });
+
+    const coVideo = tepDinhKem.some((url) => this.detectLoaiTep(url) === 'video');
+    const coHinhAnh = tepDinhKem.some((url) => this.detectLoaiTep(url) === 'hinh_anh');
+    const loaiBaiViet = coVideo && !coHinhAnh ? 'video' : 'bai_viet';
+    const batKiemTien = Boolean(dto.bat_kiem_tien);
+
+    let idMonAnGanLink: number | null = null;
+    let linkMonAn: string | null = null;
+    if (batKiemTien) {
+      if (!user.la_nha_sang_tao && user.trang_thai_kiem_tien_noi_dung !== 'da_duyet') {
+        throw new ForbiddenException('Tài khoản chưa được phê duyệt kiếm tiền từ nội dung');
+      }
+      linkMonAn = dto.link_mon_an?.trim() ?? '';
+      if (!linkMonAn) {
+        throw new BadRequestException('Vui lòng nhập link món hợp lệ');
+      }
+      const monId = this.parseMonAnIdTuLink(linkMonAn);
+      if (!monId) {
+        throw new BadRequestException('Link món không hợp lệ. Vui lòng dùng link món trên DishNet');
+      }
+      const monAn = await this.monAnRepo.findOne({
+        where: {
+          id: monId,
+          trang_thai_ban: 'dang_ban',
+        },
+      });
+      if (!monAn) {
+        throw new BadRequestException('Món ăn không tồn tại hoặc không còn khả dụng');
+      }
+      idMonAnGanLink = Number(monAn.id);
+    }
+
+    const baiViet = await this.baiVietRepo.save({
+      id_nguoi_dang: idNguoiDung,
+      id_cua_hang: null,
+      loai_bai_viet: loaiBaiViet,
+      id_bai_viet_goc: null,
+      id_mon_an: idMonAnGanLink,
+      id_don_hang: null,
+      noi_dung: noiDung || null,
+      so_sao: null,
+      muc_do_hien_thi: dto.muc_do_hien_thi ?? 'cong_khai',
+      trang_thai_duyet: 'hien_thi',
+      bat_kiem_tien: batKiemTien,
+      link_mon_an: linkMonAn,
+      tong_luot_xem: 0,
+      tong_luot_thich: 0,
+      tong_luot_binh_luan: 0,
+      tong_luot_chia_se: 0,
+      tong_luot_luu: 0,
+      ngay_dang: new Date(),
+    });
+
+    if (tepDinhKem.length > 0) {
+      await this.tepRepo.save(
+        tepDinhKem.map((url, index) => ({
+          loai_doi_tuong: 'bai_viet',
+          id_doi_tuong: Number(baiViet.id),
+          loai_tep: this.detectLoaiTep(url),
+          duong_dan_tep: url,
+          thu_tu_hien_thi: index + 1,
+          ghi_chu: null,
+          ngay_tao: new Date(),
+        })),
+      );
+    }
+
+    const media = await this.mapMediaByObject('bai_viet', [Number(baiViet.id)]);
+    return {
+      id: Number(baiViet.id),
+      loai_bai_viet: baiViet.loai_bai_viet,
+      noi_dung: baiViet.noi_dung,
+      muc_do_hien_thi: baiViet.muc_do_hien_thi,
+      bat_kiem_tien: Boolean(baiViet.bat_kiem_tien),
+      link_mon_an: baiViet.link_mon_an,
+      id_mon_an: baiViet.id_mon_an != null ? Number(baiViet.id_mon_an) : null,
+      ngay_dang: baiViet.ngay_dang,
+      tep_dinh_kem: media.get(Number(baiViet.id)) ?? [],
+      thong_tin_nguoi_dang: {
+        id: Number(user.id),
+        ten_hien_thi: user.ten_hien_thi ?? 'Người dùng',
+        anh_dai_dien: user.anh_dai_dien ?? null,
+      },
+      tong_luot_thich: Number(baiViet.tong_luot_thich ?? 0),
+      tong_luot_binh_luan: Number(baiViet.tong_luot_binh_luan ?? 0),
+      tong_luot_chia_se: Number(baiViet.tong_luot_chia_se ?? 0),
+    };
+  }
+
+  async capNhatBaiViet(idBaiViet: number, idNguoiDung: number, dto: TaoBaiVietDto) {
+    const baiViet = await this.baiVietRepo.findOne({
+      where: { id: idBaiViet, id_nguoi_dang: idNguoiDung, trang_thai_duyet: 'hien_thi' },
+    });
+    if (!baiViet) {
+      throw new NotFoundException('Bài viết không tồn tại hoặc bạn không có quyền chỉnh sửa');
+    }
+
+    const user = await this.nguoiDungRepo.findOne({ where: { id: idNguoiDung } });
+    if (!user) {
+      throw new NotFoundException('Người dùng không tồn tại');
+    }
+
+    const noiDung = dto.noi_dung?.trim() ?? '';
+    const tepDinhKem = (dto.tep_dinh_kem ?? []).map((url) => url.trim()).filter(Boolean);
+    if (!noiDung && tepDinhKem.length === 0) {
+      throw new BadRequestException('Vui lòng nhập nội dung hoặc thêm phương tiện');
+    }
+
+    const choPhep = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp4', 'mov', 'avi', 'mkv']);
+    tepDinhKem.forEach((url) => {
+      const ext = this.layPhanMoRongTep(url);
+      if (!choPhep.has(ext)) {
+        throw new BadRequestException(`Tệp đính kèm có định dạng không hợp lệ: ${url}`);
+      }
+    });
+
+    const coVideo = tepDinhKem.some((url) => this.detectLoaiTep(url) === 'video');
+    const coHinhAnh = tepDinhKem.some((url) => this.detectLoaiTep(url) === 'hinh_anh');
+    const loaiBaiViet = coVideo && !coHinhAnh ? 'video' : 'bai_viet';
+    const batKiemTien = Boolean(dto.bat_kiem_tien);
+
+    let idMonAnGanLink: number | null = null;
+    let linkMonAn: string | null = null;
+    if (batKiemTien) {
+      if (!user.la_nha_sang_tao && user.trang_thai_kiem_tien_noi_dung !== 'da_duyet') {
+        throw new ForbiddenException('Tài khoản chưa được phê duyệt kiếm tiền từ nội dung');
+      }
+      linkMonAn = dto.link_mon_an?.trim() ?? '';
+      if (!linkMonAn) {
+        throw new BadRequestException('Vui lòng nhập link món hợp lệ');
+      }
+      const monId = this.parseMonAnIdTuLink(linkMonAn);
+      if (!monId) {
+        throw new BadRequestException('Link món không hợp lệ. Vui lòng dùng link món trên DishNet');
+      }
+      const monAn = await this.monAnRepo.findOne({ where: { id: monId, trang_thai_ban: 'dang_ban' } });
+      if (!monAn) {
+        throw new BadRequestException('Món ăn không tồn tại hoặc không còn khả dụng');
+      }
+      idMonAnGanLink = Number(monAn.id);
+    }
+
+    baiViet.noi_dung = noiDung || null;
+    baiViet.loai_bai_viet = loaiBaiViet;
+    baiViet.muc_do_hien_thi = dto.muc_do_hien_thi ?? baiViet.muc_do_hien_thi;
+    baiViet.bat_kiem_tien = batKiemTien;
+    baiViet.link_mon_an = linkMonAn;
+    baiViet.id_mon_an = idMonAnGanLink;
+    await this.baiVietRepo.save(baiViet);
+
+    await this.tepRepo.delete({ loai_doi_tuong: 'bai_viet', id_doi_tuong: idBaiViet });
+    if (tepDinhKem.length > 0) {
+      await this.tepRepo.save(
+        tepDinhKem.map((url, index) => ({
+          loai_doi_tuong: 'bai_viet',
+          id_doi_tuong: idBaiViet,
+          loai_tep: this.detectLoaiTep(url),
+          duong_dan_tep: url,
+          thu_tu_hien_thi: index + 1,
+          ghi_chu: null,
+          ngay_tao: new Date(),
+        })),
+      );
+    }
+
+    const media = await this.mapMediaByObject('bai_viet', [idBaiViet]);
+    return {
+      id: idBaiViet,
+      loai_bai_viet: baiViet.loai_bai_viet,
+      noi_dung: baiViet.noi_dung,
+      muc_do_hien_thi: baiViet.muc_do_hien_thi,
+      bat_kiem_tien: Boolean(baiViet.bat_kiem_tien),
+      link_mon_an: baiViet.link_mon_an,
+      id_mon_an: baiViet.id_mon_an != null ? Number(baiViet.id_mon_an) : null,
+      ngay_dang: baiViet.ngay_dang,
+      tep_dinh_kem: media.get(idBaiViet) ?? [],
+      tong_luot_thich: Number(baiViet.tong_luot_thich ?? 0),
+      tong_luot_binh_luan: Number(baiViet.tong_luot_binh_luan ?? 0),
+      tong_luot_chia_se: Number(baiViet.tong_luot_chia_se ?? 0),
+    };
+  }
+
+  async xoaBaiViet(idBaiViet: number, idNguoiDung: number) {
+    const baiViet = await this.baiVietRepo.findOne({
+      where: { id: idBaiViet, id_nguoi_dang: idNguoiDung, trang_thai_duyet: 'hien_thi' },
+    });
+    if (!baiViet) {
+      throw new NotFoundException('Bài viết không tồn tại hoặc bạn không có quyền xóa');
+    }
+    baiViet.trang_thai_duyet = 'da_xoa';
+    await this.baiVietRepo.save(baiViet);
+    return { id: idBaiViet, trang_thai_duyet: 'da_xoa', message: 'Đã xóa bài viết' };
+  }
+
+  private detectLoaiTep(url: string) {
+    const normalized = url.split('?')[0].split('#')[0].toLowerCase();
+    if (
+      normalized.endsWith('.png') ||
+      normalized.endsWith('.jpg') ||
+      normalized.endsWith('.jpeg') ||
+      normalized.endsWith('.webp') ||
+      normalized.endsWith('.gif')
+    ) {
+      return 'hinh_anh';
+    }
+    if (
+      normalized.endsWith('.mp4') ||
+      normalized.endsWith('.mov') ||
+      normalized.endsWith('.avi') ||
+      normalized.endsWith('.mkv')
+    ) {
+      return 'video';
+    }
+    return 'tep_khac';
+  }
+
+  private layPhanMoRongTep(url: string) {
+    const normalized = url.split('?')[0].split('#')[0].toLowerCase();
+    const parts = normalized.split('.');
+    if (parts.length < 2) {
+      return '';
+    }
+    return parts[parts.length - 1];
   }
 
   private async mapMediaByObject(

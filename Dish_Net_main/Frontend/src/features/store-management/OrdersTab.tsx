@@ -974,6 +974,14 @@ export default function OrdersTab() {
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, [searchText]);
 
+  // Auto-refresh tab counts + orders mỗi 15s để cập nhật trạng thái real-time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!loading) loadOrders(currentPage);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadOrders, currentPage, loading]);
+
   // Action handlers
   const handleConfirm = async (id: string, prepTime: string) => {
     const order = orders.find((o) => o.id === id);

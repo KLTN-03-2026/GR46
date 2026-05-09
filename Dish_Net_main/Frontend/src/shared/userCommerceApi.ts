@@ -51,6 +51,38 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export type UserOrderTab = 'placed' | 'purchased' | 'cancelled' | 'returned' | 'review';
 
 export const userCommerceApi = {
+  uploadTepHoTro: async (file: File) => {
+    const path = `${API_BASE}/user/ho-tro/upload`;
+    const requestUrl =
+      typeof window === 'undefined'
+        ? new URL(
+            path,
+            process.env.NEXT_PUBLIC_APP_ORIGIN ?? 'http://127.0.0.1:4000',
+          ).toString()
+        : path;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(requestUrl, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+
+    const body = await res.json().catch(() => null);
+    const payload = isApiEnvelope<{ url: string }>(body) ? body.data : body;
+
+    if (!res.ok || !payload?.url) {
+      const message = isApiEnvelope(body) ? body.message : body?.message;
+      throw new Error(
+        Array.isArray(message) ? message.join(', ') : message || 'Có lỗi xảy ra',
+      );
+    }
+
+    return String(payload.url);
+  },
+
   taoHoTro: (body: {
     chu_de: string;
     noi_dung: string;
@@ -94,6 +126,11 @@ export const userCommerceApi = {
     return request(`/user/thong-bao${suffix}`);
   },
 
+  danhDauThongBaoDaDoc: (id: number | string) =>
+    request(`/user/thong-bao/${id}/danh-dau-da-doc`, {
+      method: 'PATCH',
+    }),
+
   layYeuCauChuyenNghiep: () => request('/user/che-do-chuyen-nghiep/yeu-cau'),
 
   dangKyKiemTienNoiDung: (body: {
@@ -108,6 +145,15 @@ export const userCommerceApi = {
     mo_ta?: string;
   }) =>
     request('/user/che-do-chuyen-nghiep/kiem-tien-noi-dung', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  taoYeuCauRutTien: (body: {
+    id_tai_khoan_rut_tien: number;
+    so_tien: number;
+  }) =>
+    request('/user/che-do-chuyen-nghiep/rut-tien', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -253,6 +299,11 @@ export const userCommerceApi = {
 
   muaLaiDonHang: (maDonHang: string) =>
     request(`/user/don-hang/${encodeURIComponent(maDonHang)}/mua-lai`, {
+      method: 'POST',
+    }),
+
+  xacNhanDaGiao: (maDonHang: string) =>
+    request(`/user/don-hang/${encodeURIComponent(maDonHang)}/xac-nhan-da-giao`, {
       method: 'POST',
     }),
 

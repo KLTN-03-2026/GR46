@@ -19,8 +19,8 @@ type ProfileTab = 'posts' | 'videos' | 'reposts';
 type PostDetail = {
   noi_dung?: string;
   ngay_dang?: string;
-  tep_dinh_kem?: string[];
-  nguoi_dang?: {
+  tep_dinh_kem?: Array<string | { url?: string }>;
+  thong_tin_nguoi_dang?: {
     ten_hien_thi?: string;
   };
 };
@@ -63,8 +63,18 @@ function PostDetailModal({
 
   if (!postId) return null;
 
-  const images = Array.isArray(detail?.tep_dinh_kem) ? detail.tep_dinh_kem : [];
-  const author = detail?.nguoi_dang?.ten_hien_thi || 'Người dùng';
+  const images = Array.isArray(detail?.tep_dinh_kem)
+    ? detail.tep_dinh_kem
+        .map((item) =>
+          typeof item === 'string'
+            ? item
+            : item && typeof item === 'object' && typeof item.url === 'string'
+              ? item.url
+              : '',
+        )
+        .filter(Boolean)
+    : [];
+  const author = detail?.thong_tin_nguoi_dang?.ten_hien_thi || 'Người dùng';
   const createdAt = detail?.ngay_dang
     ? new Date(detail.ngay_dang).toLocaleString('vi-VN')
     : '';

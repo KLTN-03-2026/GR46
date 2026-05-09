@@ -1,8 +1,9 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
 
@@ -190,13 +191,19 @@ function SectionWithButton({
 }
 
 export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
-    const [deliveryAddress, setDeliveryAddress] = useState('');
-    const [searchKeyword, setSearchKeyword] = useState('');
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const [deliveryAddress, setDeliveryAddress] = useState(() => searchParams.get('address') ?? '');
+    const [searchKeyword, setSearchKeyword] = useState(() => searchParams.get('q') ?? '');
     const [isAddressOpen, setIsAddressOpen] = useState(false);
     const [isFoodSearchOpen, setIsFoodSearchOpen] = useState(false);
-    const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+    const [activeCategoryId, setActiveCategoryId] = useState<string | null>(() => searchParams.get('category'));
     const [recentFoodSearches, setRecentFoodSearches] = useState(['mì trộn']);
-    const [activeSearchResult, setActiveSearchResult] = useState<string | null>(null);
+    const [activeSearchResult, setActiveSearchResult] = useState<string | null>(() => {
+        const value = searchParams.get('q')?.trim();
+        return value ? value : null;
+    });
     const [isLoginRequiredOpen, setIsLoginRequiredOpen] = useState(false);
     const [visibleNearbyCount, setVisibleNearbyCount] = useState(8);
     const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(8);
@@ -277,15 +284,25 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
     const activeCategory = activeCategoryId
         ? data.categories.find((category) => category.id === activeCategoryId) ?? null
         : null;
-    const allStores = [...data.nearby, ...data.recommendations, ...data.topReviewerPicks];
+    const allStores = useMemo(() => [...data.nearby, ...data.recommendations, ...data.topReviewerPicks], [data.nearby, data.recommendations, data.topReviewerPicks]);
+    const normalizedAddress = deliveryAddress.trim().toLowerCase();
+    const addressFilteredStores = useMemo(
+        () =>
+            !normalizedAddress
+                ? allStores
+                : allStores.filter((item) =>
+                    `${item.title} ${item.address}`.toLowerCase().includes(normalizedAddress),
+                ),
+        [allStores, normalizedAddress],
+    );
     const categoryResults = activeCategoryId
-        ? allStores.filter(
+        ? addressFilteredStores.filter(
             (item) => item.categoryId === activeCategoryId,
         )
         : [];
     const normalizedSearchKeyword = activeSearchResult?.trim().toLowerCase() ?? '';
     const searchResults = normalizedSearchKeyword
-        ? allStores.filter((item) =>
+        ? addressFilteredStores.filter((item) =>
             `${item.title} ${item.address}`.toLowerCase().includes(normalizedSearchKeyword),
         )
         : [];
@@ -306,6 +323,32 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
     useEffect(() => {
         setVisibleCategoryCount(8);
     }, [activeCategoryId]);
+
+    useEffect(() => {
+        const urlAddress = searchParams.get('address') ?? '';
+        const urlQuery = searchParams.get('q') ?? '';
+        const urlCategory = searchParams.get('category');
+
+        if (urlAddress !== deliveryAddress) setDeliveryAddress(urlAddress);
+        if (urlQuery !== searchKeyword) setSearchKeyword(urlQuery);
+        setActiveSearchResult(urlQuery.trim() ? urlQuery : null);
+        setActiveCategoryId(urlCategory);
+    }, [searchParams]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (deliveryAddress.trim()) params.set('address', deliveryAddress.trim());
+        else params.delete('address');
+        if (activeSearchResult?.trim()) params.set('q', activeSearchResult.trim());
+        else params.delete('q');
+        if (activeCategoryId) params.set('category', activeCategoryId);
+        else params.delete('category');
+
+        const nextUrl = `${pathname}?${params.toString()}`;
+        const currentUrl = `${pathname}?${searchParams.toString()}`;
+        if (nextUrl === currentUrl) return;
+        router.replace(nextUrl, { scroll: false });
+    }, [activeCategoryId, activeSearchResult, deliveryAddress, pathname, router, searchParams]);
 
     const visibleSearchResults = searchResults.slice(0, visibleSearchCount);
     const hasMoreSearchResults = visibleSearchResults.length < searchResults.length;
@@ -354,7 +397,7 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                                             key={item.id}
                                             type="button"
                                             onClick={() => {
-                                                setDeliveryAddress(item.title);
+                                                setDeliveryAddress(item.address);
                                                 setIsAddressOpen(false);
                                             }}
                                             className={`flex w-full items-start gap-5 px-6 py-5 text-left transition hover:bg-[#f8fbff] ${index !== filteredAddressSuggestions.length - 1 ? 'border-b border-[#eef2f6]' : ''}`}
@@ -401,7 +444,7 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                         <div className="space-y-5">
                             <h2 className="text-[34px] font-bold leading-[1.15] text-[#172554] md:text-[48px]">
                                 Kết quả cho <span className="text-[#f59e0b]">{activeSearchResult}</span> gần{' '}
-                                <span className="text-[#172554]">clb Đa Nẵng</span>
+                                <span className="text-[#172554]">{deliveryAddress || 'vị trí của bạn'}</span>
                             </h2>
 
                             <div className="flex flex-wrap items-center gap-4">
@@ -495,7 +538,7 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
 
                         <SectionWithButton
                             title="Quán ngon quanh đây"
-                            items={data.nearby}
+                            items={!normalizedAddress ? data.nearby : data.nearby.filter((item) => `${item.title} ${item.address}`.toLowerCase().includes(normalizedAddress))}
                             visibleCount={visibleNearbyCount}
                             onViewMore={() => setVisibleNearbyCount((value) => value + 8)}
                         />
@@ -505,11 +548,11 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                         <section className="space-y-8">
                             <SectionHeading title="Có thể bạn sẽ thích" />
                             <div className="grid gap-x-8 gap-y-10 md:grid-cols-2 xl:grid-cols-4">
-                                {data.recommendations.slice(0, visibleRecommendationCount).map((item, index) => (
+                                {(!normalizedAddress ? data.recommendations : data.recommendations.filter((item) => `${item.title} ${item.address}`.toLowerCase().includes(normalizedAddress))).slice(0, visibleRecommendationCount).map((item, index) => (
                                     <StoreCard key={`${item.id}-${index}`} store={item} />
                                 ))}
                             </div>
-                            {visibleRecommendationCount < data.recommendations.length ? (
+                            {visibleRecommendationCount < (!normalizedAddress ? data.recommendations : data.recommendations.filter((item) => `${item.title} ${item.address}`.toLowerCase().includes(normalizedAddress))).length ? (
                                 <div className="flex justify-center">
                                     <button
                                         type="button"
@@ -527,7 +570,7 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                         <SectionWithButton
                             title="Những món được đánh giá cao bởi"
                             accent="TOP REVIEWER"
-                            items={data.topReviewerPicks}
+                            items={!normalizedAddress ? data.topReviewerPicks : data.topReviewerPicks.filter((item) => `${item.title} ${item.address}`.toLowerCase().includes(normalizedAddress))}
                             emphasizeStatus
                             visibleCount={visibleTopReviewerCount}
                             onViewMore={() => setVisibleTopReviewerCount((value) => value + 8)}

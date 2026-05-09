@@ -263,6 +263,7 @@ export class AdminReviewService {
 
       if (yc.loai_yeu_cau === "kiem_tien_noi_dung") {
         yc.nguoi_gui.la_nha_sang_tao = true;
+        yc.nguoi_gui.trang_thai_kiem_tien_noi_dung = "da_duyet";
       }
 
       yc.trang_thai = "da_duyet";
@@ -315,6 +316,7 @@ export class AdminReviewService {
       const yeuCauRepo = manager.getRepository(YeuCauNangCapEntity);
       const nhatKyRepo = manager.getRepository(NhatKyHeThongEntity);
       const thongBaoRepo = manager.getRepository(ThongBaoEntity);
+      const nguoiDungRepo = manager.getRepository(NguoiDungEntity);
 
       const yc = await yeuCauRepo.findOne({
         where: { id },
@@ -357,6 +359,11 @@ export class AdminReviewService {
           trangThai: "da_tu_choi",
           lyDo: lyDo.trim(),
         };
+      }
+
+      if (yc.loai_yeu_cau === "kiem_tien_noi_dung") {
+        yc.nguoi_gui.trang_thai_kiem_tien_noi_dung = "bi_tu_choi";
+        await nguoiDungRepo.save(yc.nguoi_gui);
       }
 
       await yeuCauRepo.save(yc);

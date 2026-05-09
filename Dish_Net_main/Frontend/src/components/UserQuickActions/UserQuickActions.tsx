@@ -9,16 +9,33 @@ import CartModal from '@/components/Cart/CartModal';
 import { USER_CART_REFRESH_EVENT } from '@/shared/cartEvents';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
-const messageParticipants = [
-    { id: 'vy', label: 'Vy', bg: 'bg-[#f6e6d2]', text: 'text-[#7a4b19]' },
-    { id: 'be', label: 'Be', bg: 'bg-[#dff2dc]', text: 'text-[#2c6b22]' },
-    { id: 'na', label: 'Na', bg: 'bg-[#fde1df]', text: 'text-[#a93b35]' },
+type MessagePreviewItem = {
+    id: number;
+    label: string;
+    avatar: string | null;
+};
+
+type ConversationRow = {
+    id_cuoc_tro_chuyen?: number;
+    so_tin_chua_doc?: number;
+    doi_tac?: {
+        ten_hien_thi?: string;
+        anh_dai_dien?: string | null;
+    };
+};
+
+const previewFallbackStyles = [
+    { bg: 'bg-[#f6e6d2]', text: 'text-[#7a4b19]' },
+    { bg: 'bg-[#dff2dc]', text: 'text-[#2c6b22]' },
+    { bg: 'bg-[#fde1df]', text: 'text-[#a93b35]' },
 ];
 
 export default function UserQuickActions() {
     const pathname = usePathname();
     const { dangNhap, nguoiDung } = useAuth();
     const [selectedCount, setSelectedCount] = useState(0);
+    const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+    const [messagePreviews, setMessagePreviews] = useState<MessagePreviewItem[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
 
     const shouldShow = dangNhap && nguoiDung?.vai_tro === 'nguoi_dung';
@@ -26,7 +43,7 @@ export default function UserQuickActions() {
     useEffect(() => {
         const syncCart = async () => {
             try {
-                const payload: any = await userCommerceApi.layGioHang();
+                const payload = await userCommerceApi.layGioHang() as { tong_mon_da_chon?: number };
                 setSelectedCount(Number(payload?.tong_mon_da_chon ?? 0));
             } catch {
                 setSelectedCount(0);
@@ -42,6 +59,57 @@ export default function UserQuickActions() {
 
         return () => {
             window.removeEventListener(USER_CART_REFRESH_EVENT, onRefresh);
+        };
+    }, []);
+
+    useEffect(() => {
+        const syncUnreadMessages = async () => {
+            try {
+                const payload = await userCommerceApi.layDanhSachTroChuyen({
+                    trang: 1,
+                    so_luong: 50,
+                }) as { du_lieu?: ConversationRow[] };
+                const rows: ConversationRow[] = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
+                const total = rows.reduce((sum: number, item) => sum + Number(item?.so_tin_chua_doc ?? 0), 0);
+                setUnreadMessageCount(total);
+
+                const normalized = rows
+                    .map((item) => ({
+                        id: Number(item?.id_cuoc_tro_chuyen ?? 0),
+                        unread: Number(item?.so_tin_chua_doc ?? 0),
+                        name: String(item?.doi_tac?.ten_hien_thi ?? 'Người dùng').trim(),
+                        avatar: item?.doi_tac?.anh_dai_dien ? String(item.doi_tac.anh_dai_dien) : null,
+                    }))
+                    .filter((item) => item.id > 0);
+
+                normalized.sort((a, b) => b.unread - a.unread);
+
+                const picked = normalized
+                    .filter((item) => item.unread > 0)
+                    .slice(0, 3);
+
+                const source = picked.length > 0 ? picked : normalized.slice(0, 3);
+
+                setMessagePreviews(
+                    source.map((item) => ({
+                        id: item.id,
+                        avatar: item.avatar,
+                        label: item.name.split(/\s+/).slice(-1)[0].slice(0, 2) || 'ND',
+                    })),
+                );
+            } catch {
+                setUnreadMessageCount(0);
+                setMessagePreviews([]);
+            }
+        };
+
+        void syncUnreadMessages();
+        const intervalId = window.setInterval(() => {
+            void syncUnreadMessages();
+        }, 15000);
+
+        return () => {
+            window.clearInterval(intervalId);
         };
     }, []);
 
@@ -67,9 +135,9 @@ export default function UserQuickActions() {
                 </button>
 
                 <Link
-                    href="/messages/reviewer-1"
+                    href="/messages"
                     aria-label="Mo tin nhan"
-                    className="group flex min-w-[138px] items-center gap-2.5 rounded-full border border-[#e6ebe3] bg-white px-3 py-2.5 shadow-[0_12px_24px_rgba(0,0,0,0.12)] transition hover:-translate-y-1 hover:shadow-[0_16px_30px_rgba(0,0,0,0.14)]"
+                    className="group relative flex min-w-[138px] items-center gap-2.5 rounded-full border border-[#e6ebe3] bg-white px-3 py-2.5 shadow-[0_12px_24px_rgba(0,0,0,0.12)] transition hover:-translate-y-1 hover:shadow-[0_16px_30px_rgba(0,0,0,0.14)]"
                 >
                     <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f7faf6] text-[#2d6d1f] transition group-hover:bg-[#edf5ea]">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -78,17 +146,29 @@ export default function UserQuickActions() {
                     </span>
                     <span className="text-[13px] font-semibold text-[#2c2c2c]">Tin nhan</span>
                     <span className="ml-auto flex items-center">
-                        {messageParticipants.map((participant, index) => (
-                            <span
-                                key={participant.id}
-                                className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[9px] font-bold ${participant.bg} ${participant.text} ${
-                                    index === 0 ? '' : '-ml-2'
-                                }`}
-                            >
-                                {participant.label}
-                            </span>
-                        ))}
+                        {messagePreviews.map((participant, index) => {
+                            const style = previewFallbackStyles[index % previewFallbackStyles.length];
+                            return (
+                                <span
+                                    key={`${participant.id}-${index}`}
+                                    className={`flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border-2 border-white text-[9px] font-bold ${
+                                        index === 0 ? '' : '-ml-2'
+                                    } ${participant.avatar ? '' : `${style.bg} ${style.text}`}`}
+                                >
+                                    {participant.avatar ? (
+                                        <img src={participant.avatar} alt={participant.label} className="h-full w-full object-cover" />
+                                    ) : (
+                                        participant.label
+                                    )}
+                                </span>
+                            );
+                        })}
                     </span>
+                    {unreadMessageCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#ff4d4f] px-1 text-[11px] font-bold text-white">
+                            {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                        </span>
+                    ) : null}
                 </Link>
             </div>
 

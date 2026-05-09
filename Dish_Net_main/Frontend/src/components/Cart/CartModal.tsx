@@ -30,6 +30,26 @@ type CartModalProps = {
     onClose: () => void;
 };
 
+type CartApiItem = {
+    id?: number;
+    ten_mon?: string;
+    ghi_chu?: string | null;
+    gia?: number;
+    hinh_anh?: string | null;
+    so_luong?: number;
+    duoc_chon?: boolean;
+};
+
+type CartApiGroup = {
+    id_cua_hang?: number;
+    ten_cua_hang?: string;
+    items?: CartApiItem[];
+};
+
+type CartPayload = {
+    groups?: CartApiGroup[];
+};
+
 function formatCurrency(value: number) {
     return `${value.toLocaleString('vi-VN')}đ`;
 }
@@ -59,16 +79,17 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
     const [groups, setGroups] = useState<CartGroup[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     const loadCart = async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const payload: any = await userCommerceApi.layGioHang();
+            const payload = (await userCommerceApi.layGioHang()) as CartPayload;
             const mappedGroups: CartGroup[] = Array.isArray(payload?.groups)
-                ? payload.groups.map((group: any) => {
+                ? payload.groups.map((group) => {
                     const items: CartItem[] = Array.isArray(group?.items)
-                        ? group.items.map((item: any) => ({
+                        ? group.items.map((item) => ({
                             id: Number(item.id),
                             name: String(item.ten_mon ?? 'Món ăn'),
                             note: item.ghi_chu ?? null,
@@ -145,8 +166,36 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
         itemId: number,
         body: { so_luong?: number; duoc_chon?: boolean },
     ) => {
-        await userCommerceApi.capNhatGioHang(itemId, body);
-        await loadCart();
+        setActionError(null);
+        const previousGroups = groups;
+        setGroups((current) =>
+            current.map((group) => ({
+                ...group,
+                selected:
+                    group.items.length > 0 &&
+                    group.items.every((item) =>
+                        item.id === itemId
+                            ? Boolean(body.duoc_chon ?? item.selected)
+                            : item.selected,
+                    ),
+                items: group.items.map((item) =>
+                    item.id === itemId
+                        ? {
+                              ...item,
+                              quantity: body.so_luong != null ? body.so_luong : item.quantity,
+                              selected: body.duoc_chon != null ? body.duoc_chon : item.selected,
+                          }
+                        : item,
+                ),
+            })),
+        );
+        try {
+            await userCommerceApi.capNhatGioHang(itemId, body);
+            emitUserCartRefreshEvent();
+        } catch (err) {
+            setGroups(previousGroups);
+            setActionError(err instanceof Error ? err.message : 'Không cập nhật được giỏ hàng');
+        }
     };
 
     const toggleGroupSelection = async (group: CartGroup) => {
@@ -180,7 +229,7 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
     return (
         <div className="fixed inset-0 z-[90] bg-black/45" onClick={onClose}>
             <div
-                className="absolute right-0 top-0 flex h-full w-full max-w-[860px] flex-col overflow-hidden bg-[#f4f4f3] shadow-[-20px_0_60px_rgba(0,0,0,0.18)]"
+                className="absolute right-0 top-0 flex h-full w-full max-w-[560px] flex-col overflow-hidden bg-[#f4f4f3] shadow-[-20px_0_60px_rgba(0,0,0,0.18)] xl:w-[36vw]"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between border-b border-[#e6e6e6] bg-white px-10 py-7">
@@ -239,7 +288,13 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                                                     <span className="min-w-4 text-center text-[18px]">{item.quantity}</span>
                                                     <button
                                                         type="button"
-                                                        onClick={() => void updateItem(item.id, { so_luong: item.quantity + 1 })}
+                                                        onClick={() => {
+                                                            if (item.quantity >= 50) {
+                                                                setActionError('Mỗi món chỉ được tối đa 50 phần');
+                                                                return;
+                                                            }
+                                                            void updateItem(item.id, { so_luong: item.quantity + 1 });
+                                                        }}
                                                         className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#e2231a] text-[22px] text-white"
                                                     >
                                                         +
@@ -277,6 +332,7 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                 </div>
 
                 <div className="border-t border-[#e4e4e4] bg-white px-8 py-5">
+                    {actionError ? <p className="mb-3 text-sm text-red-500">{actionError}</p> : null}
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <Checkbox checked={allSelected} onChange={() => void toggleSelectAll()} />
@@ -292,6 +348,7 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                                 disabled={selectedCount === 0}
                                 onClick={() => {
                                     onClose();
+                                    sessionStorage.setItem('checkout_back', window.location.pathname);
                                     router.push('/checkout');
                                 }}
                                 className="rounded-[12px] bg-[#e2231a] px-7 py-3 text-[18px] font-bold text-white transition hover:bg-[#cb1f17] disabled:cursor-not-allowed disabled:bg-[#efb2ae]"

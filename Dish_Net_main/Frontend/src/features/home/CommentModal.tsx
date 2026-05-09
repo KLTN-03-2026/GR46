@@ -16,8 +16,10 @@ type CommentRow = {
   content: string;
   likes: number;
   createdAt: string;
+  authorId: number | null;
   authorName: string;
   authorAvatar: string | null;
+  trustScore: number | null;
   taggedDish: string | null;
   imageUrls: string[];
 };
@@ -53,11 +55,11 @@ function formatDateTime(value: string) {
   });
 }
 
-function StarRating({ value }: { value: string }) {
+function StarRating({ value }: { value: number }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full bg-[#fff4e6] px-3 py-1.5 text-sm font-semibold text-[#b8691b]">
       <span className="text-base leading-none">★</span>
-      {value}
+      {value.toFixed(1)}
     </div>
   );
 }
@@ -136,6 +138,47 @@ function resolveMediaUrl(input: string) {
   return `${base}/${value}`;
 }
 
+function normalizeTrustScore(raw: unknown): number | null {
+  const score = Number(raw);
+  if (!Number.isFinite(score)) return null;
+  if (score < 0 || score > 5) return null;
+  return score;
+}
+
+function fallbackAvatarByUserId(userId: number | null) {
+  const pool = [
+    modalAssets.reviewerAvatarA,
+    modalAssets.reviewerAvatarB,
+    figmaFallbackAssets.avatarSmall,
+  ];
+  const safeId = userId && Number.isFinite(userId) && userId > 0 ? userId : 1;
+  return pool[Math.abs(safeId) % pool.length];
+}
+
+function mapCommentAuthor(rawUser: Record<string, unknown>) {
+  const rawId = rawUser?.id;
+  const userId =
+    rawId != null && Number.isFinite(Number(rawId)) && Number(rawId) > 0
+      ? Number(rawId)
+      : null;
+  const name = String(rawUser?.ten_hien_thi ?? 'Người dùng').trim() || 'Người dùng';
+  const avatarFromApi = resolveMediaUrl(
+    String((rawUser?.anh_dai_dien as string | null) ?? ''),
+  );
+  const trustScore =
+    normalizeTrustScore(rawUser?.diem_uy_tin) ??
+    normalizeTrustScore(rawUser?.do_uy_tin) ??
+    normalizeTrustScore(rawUser?.tong_diem_uy_tin) ??
+    normalizeTrustScore(rawUser?.xep_hang_uy_tin);
+
+  return {
+    id: userId,
+    name,
+    avatar: avatarFromApi || fallbackAvatarByUserId(userId),
+    trustScore,
+  };
+}
+
 export default function CommentModal({
   isOpen,
   onClose,
@@ -151,7 +194,7 @@ export default function CommentModal({
   postId?: number | null;
   onCommentPosted?: (postId: number) => void;
 }) {
-  const { dangNhap } = useAuth();
+  const { dangNhap, nguoiDung } = useAuth();
   const [activeTab, setActiveTab] = useState<CommentTab>('all');
   const [draftComment, setDraftComment] = useState('');
   const [isComposerOpen, setIsComposerOpen] = useState(startComposerOpen);
@@ -162,6 +205,8 @@ export default function CommentModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLikingCommentIds, setIsLikingCommentIds] = useState<Record<number, boolean>>({});
+  const [likedCommentIds, setLikedCommentIds] = useState<Record<number, boolean>>({});
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [composerImages, setComposerImages] = useState<ComposerImage[]>([]);
   const [dishQuery, setDishQuery] = useState('');
@@ -242,16 +287,17 @@ export default function CommentModal({
           const item = (row ?? {}) as Record<string, unknown>;
           const nguoiBinhLuan = (item.nguoi_binh_luan ?? {}) as Record<string, unknown>;
           const parsed = parseCommentMeta(String(item.noi_dung ?? ''));
+          const author = mapCommentAuthor(nguoiBinhLuan);
           return {
             id: Number(item.id ?? 0),
             parentId: item.id_binh_luan_cha != null ? Number(item.id_binh_luan_cha) : null,
             content: parsed.content,
             likes: Number(item.tong_luot_thich ?? 0),
             createdAt: String(item.ngay_tao ?? ''),
-            authorName: String(nguoiBinhLuan.ten_hien_thi ?? 'Người dùng'),
-            authorAvatar: resolveMediaUrl(
-              String((nguoiBinhLuan.anh_dai_dien as string | null) ?? ''),
-            ) || null,
+            authorId: author.id,
+            authorName: author.name,
+            authorAvatar: author.avatar,
+            trustScore: author.trustScore,
             taggedDish: parsed.taggedDish,
             imageUrls: parsed.imageUrls.map(resolveMediaUrl).filter(Boolean),
           };
@@ -382,6 +428,35 @@ export default function CommentModal({
     }
   };
 
+  const handleToggleCommentLike = async (commentId: number) => {
+    if (!dangNhap) {
+      setError('Bạn cần đăng nhập để tương tác bình luận.');
+      return;
+    }
+
+    if (isLikingCommentIds[commentId]) return;
+    setIsLikingCommentIds((current) => ({ ...current, [commentId]: true }));
+    setError(null);
+    try {
+      const result = await userContentApi.toggleThichBinhLuan(commentId);
+      setComments((current) =>
+        current.map((item) =>
+          item.id === commentId
+            ? { ...item, likes: Number(result?.tong_luot ?? item.likes) }
+            : item,
+        ),
+      );
+      setLikedCommentIds((current) => ({
+        ...current,
+        [commentId]: Boolean(result?.da_tuong_tac),
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không thể cập nhật lượt hữu ích');
+    } finally {
+      setIsLikingCommentIds((current) => ({ ...current, [commentId]: false }));
+    }
+  };
+
   useEffect(
     () => () => {
       composerImages.forEach((url) => {
@@ -446,7 +521,7 @@ export default function CommentModal({
       onClick={handleClose}
     >
       <div
-        className="relative flex h-[min(86vh,860px)] w-full max-w-[1460px] items-stretch overflow-hidden rounded-[20px] bg-[#fbfbfa] shadow-[0_28px_90px_rgba(0,0,0,0.28)]"
+      className="relative flex h-[min(82vh,760px)] w-full max-w-[1240px] items-stretch overflow-hidden rounded-[18px] bg-[#fbfbfa] shadow-[0_22px_72px_rgba(0,0,0,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -458,20 +533,20 @@ export default function CommentModal({
           ×
         </button>
 
-        <aside className="flex h-full w-full max-w-[380px] shrink-0 flex-col overflow-hidden border-r border-[#e7e7e1] bg-white">
-          <div className="border-b border-[#ecece7] px-6 pb-5 pt-7">
+        <aside className="flex h-full w-full max-w-[330px] shrink-0 flex-col overflow-hidden border-r border-[#e7e7e1] bg-white">
+          <div className="border-b border-[#ecece7] px-5 pb-4 pt-5">
             <img
               src={modalAssets.storeImage}
               alt={storeName}
-              className="h-[238px] w-full rounded-[16px] object-cover"
+              className="h-[200px] w-full rounded-[14px] object-cover"
             />
 
             <div className="mt-5 flex items-start gap-4">
-              <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-full bg-[#f38b3c] text-[26px] font-bold text-white shadow-[0_10px_18px_rgba(243,139,60,0.28)]">
+              <div className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full bg-[#f38b3c] text-[22px] font-bold text-white shadow-[0_10px_18px_rgba(243,139,60,0.28)]">
                 {averageRating}
               </div>
               <div className="min-w-0 pt-1">
-                <h2 className="text-[29px] font-semibold leading-[1.08] text-[#292929]">
+                <h2 className="text-[24px] font-semibold leading-[1.1] text-[#292929]">
                   {storeName}
                 </h2>
                 <p className="mt-2 text-sm leading-7 text-[#7b7b73]">
@@ -483,13 +558,13 @@ export default function CommentModal({
             <button
               type="button"
               onClick={() => setIsComposerOpen((current) => !current)}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-[12px] bg-[#1f86ff] px-5 py-3.5 text-[18px] font-semibold text-white transition hover:bg-[#1274ea]"
+              className="mt-5 inline-flex w-full items-center justify-center rounded-[12px] bg-[#1f86ff] px-5 py-3 text-[16px] font-semibold text-white transition hover:bg-[#1274ea]"
             >
               {isComposerOpen ? 'Ẩn viết bình luận' : 'Viết bình luận'}
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden p-6" style={{ paddingTop: '5px' }}>
+          <div className="flex-1 overflow-hidden p-5" style={{ paddingTop: '4px' }}>
             <div className="rounded-[16px] bg-[#f7f8f4] p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8e9488]">
                 Tóm tắt
@@ -517,13 +592,13 @@ export default function CommentModal({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f8f8f5]">
-          <div className="border-b border-[#e8e8e2] bg-white px-8 pb-5 pt-6 pr-20">
+          <div className="border-b border-[#e8e8e2] bg-white px-6 pb-4 pt-5 pr-16">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9aa091]">
                   Cộng đồng DishNet
                 </p>
-                <h3 className="mt-2 text-[28px] font-semibold text-[#2e2e2c]">
+                <h3 className="mt-2 text-[24px] font-semibold text-[#2e2e2c]">
                   Bình luận về {storeName}
                 </h3>
               </div>
@@ -557,9 +632,17 @@ export default function CommentModal({
                   </p>
                 ) : (
                   <div className="flex gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#275d18] text-sm font-bold text-white">
-                      N
-                    </div>
+                    {nguoiDung?.anh_dai_dien ? (
+                      <img
+                        src={nguoiDung.anh_dai_dien}
+                        alt={nguoiDung.ten_hien_thi}
+                        className="h-11 w-11 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#275d18] text-sm font-bold text-white">
+                        {nguoiDung?.ten_hien_thi?.charAt(0)?.toUpperCase() ?? 'U'}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <textarea
                         value={draftComment}
@@ -676,7 +759,7 @@ export default function CommentModal({
               </div>
             ) : (
               <div className="space-y-5">
-                {grouped.rootComments.map((comment, index) => {
+                {grouped.rootComments.map((comment) => {
                   const replies = grouped.childMap.get(comment.id) ?? [];
                   const bodyText = comment.content
                     .replace(/\n{3,}/g, '\n\n')
@@ -693,7 +776,7 @@ export default function CommentModal({
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-4">
                           <img
-                            src={comment.authorAvatar || `https://i.pravatar.cc/120?img=${(index % 10) + 10}`}
+                            src={comment.authorAvatar || fallbackAvatarByUserId(comment.authorId)}
                             alt={comment.authorName}
                             className="h-14 w-14 rounded-full object-cover"
                           />
@@ -702,7 +785,7 @@ export default function CommentModal({
                               <h4 className="text-lg font-semibold text-[#252525]">
                                 {comment.authorName}
                               </h4>
-                              <StarRating value={comment.likes > 10 ? '4.8' : comment.likes > 4 ? '4.6' : '4.4'} />
+                              {comment.trustScore != null ? <StarRating value={comment.trustScore} /> : null}
                             </div>
                             <p className="mt-1 text-sm text-[#8a8f85]">{formatDateTime(comment.createdAt)}</p>
                             {showTitle ? (
@@ -730,27 +813,35 @@ export default function CommentModal({
                         </div>
                       ) : null}
 
-                      {comment.imageUrls.filter((url) => url && !url.startsWith('blob:')).length > 0 ? (
-                        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
-                          <p className="text-[15px] leading-7 text-[#444840]">
-                            {normalizedBody}
-                          </p>
-                          <img
-                            src={comment.imageUrls.find((url) => url && !url.startsWith('blob:'))}
-                            alt={comment.authorName}
-                            className="h-[124px] w-full rounded-[14px] object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="mt-4">
-                          <p className="text-[15px] leading-7 text-[#444840]">
-                            {normalizedBody}
-                          </p>
-                        </div>
-                      )}
+                      <div className="mt-4">
+                        <p className="text-[15px] leading-7 text-[#444840]">
+                          {normalizedBody}
+                        </p>
+                        {comment.imageUrls.filter(Boolean).length > 0 ? (
+                          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {comment.imageUrls.filter(Boolean).map((url, imageIndex) => (
+                              <img
+                                key={`${comment.id}-image-${imageIndex}`}
+                                src={url}
+                                alt={`${comment.authorName}-${imageIndex + 1}`}
+                                className="h-[124px] w-full rounded-[14px] object-cover"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
 
                       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[#edf0e7] pt-4 text-sm text-[#7a8174]">
-                        <button type="button" className="rounded-full bg-[#f7f8f4] px-4 py-2 transition hover:bg-[#eef2ea]">
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleCommentLike(comment.id)}
+                          disabled={Boolean(isLikingCommentIds[comment.id])}
+                          className={`rounded-full px-4 py-2 transition ${
+                            likedCommentIds[comment.id]
+                              ? 'bg-[#e9f6e5] text-[#2f7f27]'
+                              : 'bg-[#f7f8f4] hover:bg-[#eef2ea]'
+                          } disabled:opacity-60`}
+                        >
                           Hữu ích · {comment.likes}
                         </button>
                         <button
@@ -773,9 +864,17 @@ export default function CommentModal({
                             </p>
                           ) : (
                             <div className="flex gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#275d18] text-sm font-bold text-white">
-                                N
-                              </div>
+                              {nguoiDung?.anh_dai_dien ? (
+                                <img
+                                  src={nguoiDung.anh_dai_dien}
+                                  alt={nguoiDung.ten_hien_thi}
+                                  className="h-10 w-10 shrink-0 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#275d18] text-sm font-bold text-white">
+                                  {nguoiDung?.ten_hien_thi?.charAt(0)?.toUpperCase() ?? 'U'}
+                                </div>
+                              )}
                               <div className="min-w-0 flex-1">
                                 <textarea
                                   value={replyDrafts[comment.id] ?? ''}
@@ -820,14 +919,14 @@ export default function CommentModal({
 
                       {expandedReplies[comment.id] && replies.length > 0 ? (
                         <div className="mt-4 space-y-3 border-t border-[#edf0e7] pt-4">
-                          {replies.map((reply, replyIndex) => (
+                          {replies.map((reply) => (
                             <article
                               key={reply.id}
                               className="ml-4 rounded-[16px] border border-[#e8ece2] bg-[#fafbf8] p-4"
                             >
                               <div className="flex items-start gap-3">
                                 <img
-                                  src={reply.authorAvatar || `https://i.pravatar.cc/120?img=${(replyIndex % 10) + 30}`}
+                                  src={reply.authorAvatar || fallbackAvatarByUserId(reply.authorId)}
                                   alt={reply.authorName}
                                   className="h-10 w-10 rounded-full object-cover"
                                 />
@@ -836,6 +935,7 @@ export default function CommentModal({
                                     <h6 className="text-sm font-semibold text-[#252525]">
                                       {reply.authorName}
                                     </h6>
+                                    {reply.trustScore != null ? <StarRating value={reply.trustScore} /> : null}
                                     <span className="text-xs text-[#8a8f85]">
                                       {formatDateTime(reply.createdAt)}
                                     </span>

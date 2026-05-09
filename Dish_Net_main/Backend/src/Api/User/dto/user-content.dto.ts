@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -70,6 +71,41 @@ export class TaoBinhLuanDto {
 
   @IsOptional()
   id_binh_luan_cha?: number;
+}
+
+export class TaoBaiVietDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  noi_dung?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tep_dinh_kem?: string[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['cong_khai', 'ban_be'])
+  muc_do_hien_thi?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  bat_kiem_tien?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  link_mon_an?: string;
+}
+
+export class CapNhatBaiVietDto extends TaoBaiVietDto {}
+
+export class ChiaSeBaiVietDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['cong_khai', 'ban_be'])
+  muc_do_hien_thi?: string;
 }
 
 export class BaoCaoBaiVietDto {

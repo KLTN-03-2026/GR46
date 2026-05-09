@@ -34,7 +34,6 @@ export type RankingTabConfig = {
 
 export type RankingPageData = Record<RankingTab, RankingTabConfig>;
 export type RankingFilterQuery = {
-  khu_vuc?: string;
   so_don_hang_tu?: number;
   diem_danh_gia_tu?: number;
   trang_thai?: 'hoat_dong' | 'tam_dung' | 'cho_duyet';
@@ -44,19 +43,19 @@ export type RankingFilterQuery = {
 const EMPTY: RankingPageData = {
   stores: {
     label: 'Cửa hàng',
-    filters: ['Khu vực', 'Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
+    filters: ['Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
     columns: { primary: 'Cửa hàng', score: 'Đánh giá', metric: 'Số đơn hàng', finalMetric: 'Tỉ lệ hủy' },
     rows: [],
   },
   reviewers: {
     label: 'Reviewer',
-    filters: ['Khu vực', 'Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
+    filters: ['Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
     columns: { primary: 'Food Reviewer', score: 'Độ tin cậy', metric: 'Lượt xem', secondaryMetric: 'Lượt thích', finalMetric: 'Lượt bình luận' },
     rows: [],
   },
   foods: {
     label: 'Món ăn',
-    filters: ['Khu vực', 'Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
+    filters: ['Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
     columns: { primary: 'Món ăn', secondary: 'Cửa hàng', score: 'Đánh giá', metric: 'Đã bán' },
     rows: [],
   },
@@ -81,13 +80,12 @@ export async function getRankingData(
   const payload: any = await userContentApi.layBangXepHangChiTiet({
     tab: tabToApiTab(tab),
     tu_khoa: tuKhoa || undefined,
-    khu_vuc: filters?.khu_vuc || undefined,
     so_don_hang_tu: filters?.so_don_hang_tu,
     diem_danh_gia_tu: filters?.diem_danh_gia_tu,
     trang_thai: filters?.trang_thai,
     ty_le_huy_toi_da: filters?.ty_le_huy_toi_da,
     trang: 1,
-    so_luong: 30,
+    so_luong: 10,
   });
 
   const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];

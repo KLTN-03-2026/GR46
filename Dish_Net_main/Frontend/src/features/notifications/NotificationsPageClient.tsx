@@ -1,7 +1,10 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
+import { useRouter } from 'next/navigation';
+import { userCommerceApi } from '@/shared/userCommerceApi';
 import type { NotificationItem } from './data';
+import { resolveNotificationTarget } from './data';
 
 function NotificationTypeBadge({ type }: { type: NotificationItem['type'] }) {
     const palette = {
@@ -23,6 +26,20 @@ export default function NotificationsPageClient({
 }: {
     notifications: NotificationItem[];
 }) {
+    const router = useRouter();
+
+    const handleNotificationClick = async (item: NotificationItem) => {
+        const id = Number(item.id);
+        if (Number.isFinite(id) && id > 0 && !item.isRead) {
+            try {
+                await userCommerceApi.danhDauThongBaoDaDoc(id);
+            } catch {
+                // ignore mark-read failures to avoid blocking navigation
+            }
+        }
+        router.push(resolveNotificationTarget(item));
+    };
+
     return (
         <div className="bg-[#f6f5f1] py-10">
             <section className="mx-auto w-full max-w-[1240px] rounded-[28px] border border-[#dfe5db] bg-white px-8 py-8 shadow-[0_14px_34px_rgba(0,0,0,0.05)]">
@@ -46,9 +63,11 @@ export default function NotificationsPageClient({
                         </article>
                     ) : (
                         notifications.map((item) => (
-                            <article
+                            <button
                                 key={item.id}
-                                className="flex items-center gap-5 rounded-[22px] px-2 py-4 transition hover:bg-[#f8faf7]"
+                                type="button"
+                                onClick={() => void handleNotificationClick(item)}
+                                className="flex w-full items-center gap-5 rounded-[22px] px-2 py-4 text-left transition hover:bg-[#f8faf7]"
                             >
                                 <div className="relative shrink-0">
                                     <img src={item.avatar} alt="" className="h-24 w-24 rounded-full object-cover" />
@@ -61,7 +80,7 @@ export default function NotificationsPageClient({
                                 </div>
 
                                 <span className={`mr-6 h-6 w-6 rounded-full ${item.isRead ? 'bg-[#c4ccd4]' : 'bg-[#1d71e8]'}`} />
-                            </article>
+                            </button>
                         ))
                     )}
                 </div>

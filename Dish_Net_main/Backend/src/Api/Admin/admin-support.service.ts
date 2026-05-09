@@ -7,6 +7,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, SelectQueryBuilder } from "typeorm";
 import { NguoiDungEntity } from "../Auth/entities/nguoi-dung.entity";
 import { TepDinhKemEntity } from "./entities/tep-dinh-kem.entity";
+import { ThongBaoEntity } from "./entities/thong-bao.entity";
 import { YeuCauHoTroEntity } from "./entities/yeu-cau-ho-tro.entity";
 
 @Injectable()
@@ -16,6 +17,8 @@ export class AdminSupportService {
     private readonly yeuCauHoTroRepo: Repository<YeuCauHoTroEntity>,
     @InjectRepository(TepDinhKemEntity)
     private readonly tepDinhKemRepo: Repository<TepDinhKemEntity>,
+    @InjectRepository(ThongBaoEntity)
+    private readonly thongBaoRepo: Repository<ThongBaoEntity>,
   ) {}
 
   async layDanhSach(query: {
@@ -154,6 +157,17 @@ export class AdminSupportService {
     yeuCau.thoi_gian_phan_hoi = new Date();
 
     await this.yeuCauHoTroRepo.save(yeuCau);
+    await this.thongBaoRepo.save({
+      id_nguoi_nhan: Number(yeuCau.id_nguoi_gui),
+      loai_thong_bao: "ho_tro",
+      loai_doi_tuong: "yeu_cau_ho_tro",
+      id_doi_tuong: Number(yeuCau.id),
+      tieu_de: "Yêu cầu hỗ trợ đã được phản hồi",
+      noi_dung: "DishNet đã phản hồi yêu cầu hỗ trợ của bạn. Mở mục Trợ giúp để xem chi tiết.",
+      da_doc: false,
+      thoi_gian_doc: null,
+      ngay_tao: new Date(),
+    });
 
     return { message: "Phan hoi yeu cau ho tro thanh cong" };
   }

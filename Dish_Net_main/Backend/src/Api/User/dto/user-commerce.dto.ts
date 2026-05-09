@@ -197,6 +197,7 @@ export class CapNhatGioHangDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(50)
   so_luong?: number;
 
   @IsOptional()
@@ -216,6 +217,7 @@ export class ThemVaoGioHangDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(50)
   so_luong?: number;
 
   @IsOptional()
@@ -352,4 +354,13 @@ export class GuiTinNhanDto {
   @MinLength(1)
   @MaxLength(5000)
   noi_dung: string;
+}
+
+export class TaoYeuCauRutTienDto {
+  @IsInt()
+  id_tai_khoan_rut_tien: number;
+
+  @IsInt()
+  @Min(1)
+  so_tien: number;
 }

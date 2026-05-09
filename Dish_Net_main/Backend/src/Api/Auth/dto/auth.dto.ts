@@ -6,19 +6,26 @@ import {
   IsBoolean,
   MinLength,
   MaxLength,
+  Matches,
 } from "class-validator";
 
 export class DangKyDto {
-  @IsEmail({}, { message: "Email khong hop le" })
-  @IsNotEmpty({ message: "Email khong duoc de trong" })
+  @IsEmail({}, { message: "Email không hợp lệ" })
+  @Matches(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i, {
+    message: "Email không đúng định dạng cho phép",
+  })
+  @IsNotEmpty({ message: "Email không được để trống" })
   email: string;
 
   @IsString()
   @IsOptional()
+  @Matches(/^(0|\+84)(3|5|7|8|9)\d{8}$/, {
+    message: "Số điện thoại không hợp lệ (VD: 09xxxxxxxx hoặc +849xxxxxxxx)",
+  })
   so_dien_thoai?: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Ten hien thi khong duoc de trong" })
+  @IsNotEmpty({ message: "Tên hiển thị không được để trống" })
   @MaxLength(120)
   ten_hien_thi: string;
 
@@ -31,12 +38,12 @@ export class DangKyDto {
   dia_chi?: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Mat khau khong duoc de trong" })
-  @MinLength(6, { message: "Mat khau phai co it nhat 6 ky tu" })
+  @IsNotEmpty({ message: "Mật khẩu không được để trống" })
+  @MinLength(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" })
   mat_khau: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Xac nhan mat khau khong duoc de trong" })
+  @IsNotEmpty({ message: "Xác nhận mật khẩu không được để trống" })
   xac_nhan_mat_khau: string;
 }
 
@@ -46,17 +53,17 @@ export class XacNhanOtpDto {
   email: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Ma OTP khong duoc de trong" })
+  @IsNotEmpty({ message: "Mã OTP không được để trống" })
   ma_otp: string;
 }
 
 export class DangNhapDto {
   @IsString()
-  @IsNotEmpty({ message: "Ten dang nhap hoac email khong duoc de trong" })
+  @IsNotEmpty({ message: "Tên đăng nhập hoặc email không được để trống" })
   tai_khoan: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Mat khau khong duoc de trong" })
+  @IsNotEmpty({ message: "Mật khẩu không được để trống" })
   mat_khau: string;
 
   @IsOptional()
@@ -67,11 +74,25 @@ export class ChonVaiTroDto {
   @IsString()
   @IsNotEmpty()
   vai_tro: string;
+
+  @IsOptional()
+  @IsBoolean()
+  luu_dang_nhap?: boolean;
+}
+
+export class DangNhapGoogleDto {
+  @IsString()
+  @IsNotEmpty({ message: "Thiếu thông tin xác thực Google" })
+  credential: string;
+
+  @IsOptional()
+  @IsBoolean()
+  luu_dang_nhap?: boolean;
 }
 
 export class QuenMatKhauDto {
-  @IsEmail({}, { message: "Email khong hop le" })
-  @IsNotEmpty({ message: "Email khong duoc de trong" })
+  @IsEmail({}, { message: "Email không hợp lệ" })
+  @IsNotEmpty({ message: "Email không được để trống" })
   email: string;
 }
 
@@ -95,8 +116,8 @@ export class DatLaiMatKhauDto {
   ma_otp: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Mat khau moi khong duoc de trong" })
-  @MinLength(6, { message: "Mat khau phai co it nhat 6 ky tu" })
+  @IsNotEmpty({ message: "Mật khẩu mới không được để trống" })
+  @MinLength(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" })
   mat_khau_moi: string;
 
   @IsString()
@@ -116,16 +137,16 @@ export class GuiLaiOtpDto {
 
 export class DoiMatKhauDto {
   @IsString()
-  @IsNotEmpty({ message: "Mat khau hien tai khong duoc de trong" })
+  @IsNotEmpty({ message: "Mật khẩu hiện tại không được để trống" })
   mat_khau_hien_tai: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Mat khau moi khong duoc de trong" })
-  @MinLength(6, { message: "Mat khau phai co it nhat 6 ky tu" })
+  @IsNotEmpty({ message: "Mật khẩu mới không được để trống" })
+  @MinLength(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" })
   mat_khau_moi: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Xac nhan mat khau khong duoc de trong" })
+  @IsNotEmpty({ message: "Xác nhận mật khẩu không được để trống" })
   xac_nhan_mat_khau: string;
 
   @IsOptional()

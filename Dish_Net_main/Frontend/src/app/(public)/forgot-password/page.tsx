@@ -78,7 +78,7 @@ export default function ForgotPasswordPage() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [countdown, setCountdown] = useState(60);
+    const [countdown, setCountdown] = useState(120);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -129,7 +129,7 @@ export default function ForgotPasswordPage() {
         setLoading(true);
         try {
             await authApi.quenMatKhau({ email });
-            setCountdown(60);
+            setCountdown(120);
             setSubmitted(false);
             setStep(2);
         } catch (error: unknown) {
@@ -185,7 +185,7 @@ export default function ForgotPasswordPage() {
     const handleResend = async () => {
         try {
             await authApi.guiLaiOtp({ email, loai_xac_thuc: 'quen_mat_khau' });
-            setCountdown(60);
+            setCountdown(120);
             setServerError('');
         } catch {}
     };
@@ -239,7 +239,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                                 <div className="w-full"><FieldError message={submitted ? errors.otp : ''} /></div>
                                 <p className="mb-6 mt-2 text-center text-[13px] text-[#9aa1a9]">
-                                    Mã xác nhận chỉ có hiệu lực trong vòng 01 tiếng.{' '}
+                                    Mã xác nhận chỉ có hiệu lực trong vòng 02 phút.{' '}
                                     <span className="font-bold text-[#285E19]">{formatTime(countdown)}</span>
                                     {countdown === 0 && (
                                         <button type="button" onClick={handleResend} className="ml-2 font-bold text-[#3b82f6] hover:underline">Gửi lại</button>

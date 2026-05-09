@@ -19,6 +19,8 @@ import { DanhMucMonEntity } from '../Admin/entities/danh-muc-mon.entity';
 import { MonAnEntity } from '../Admin/entities/mon-an.entity';
 import { ToppingEntity } from '../Admin/entities/topping.entity';
 import { KhuyenMaiEntity } from '../Admin/entities/khuyen-mai.entity';
+import { ThanhToanEntity } from '../User/entities/thanh-toan.entity';
+import { StoreOrderTimeoutService } from './store-order-timeout.service';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { KhuyenMaiEntity } from '../Admin/entities/khuyen-mai.entity';
       DanhMucMonEntity,
       MonAnEntity,
       ToppingEntity,
+      ThanhToanEntity,
     ]),
   ],
   controllers: [
@@ -47,6 +50,7 @@ import { KhuyenMaiEntity } from '../Admin/entities/khuyen-mai.entity';
     StoreMenuService,
     StoreOverviewService,
     StoreRevenueService,
+    StoreOrderTimeoutService,
   ],
 })
 export class StoreModule {}

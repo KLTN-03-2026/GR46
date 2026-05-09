@@ -210,7 +210,12 @@ function PromoModal({
   const [name, setName] = useState(promo?.name || '');
   const [code, setCode] = useState(promo?.code || '');
   const [type, setType] = useState<PromoType>(promo?.type || 'phan_tram');
-  const [discountValue, setDiscountValue] = useState(promo ? String(promo.rawDiscountValue) : '');
+  const [percentValue, setPercentValue] = useState(
+    promo?.type === 'phan_tram' ? String(promo.rawDiscountValue) : '',
+  );
+  const [amountValue, setAmountValue] = useState(
+    promo?.type === 'so_tien' ? String(promo.rawDiscountValue) : '',
+  );
   const [maxDiscount, setMaxDiscount] = useState(promo?.gia_tri_toi_da ? String(promo.gia_tri_toi_da) : '');
   const [minOrder, setMinOrder] = useState(promo ? String(promo.rawMinOrder) : '');
   const [maxUse, setMaxUse] = useState(promo?.rawMaxUse ? String(promo.rawMaxUse) : '');
@@ -233,7 +238,9 @@ function PromoModal({
     if (!startDate || !endDate) { setError('Vui lòng chọn đầy đủ thời gian bắt đầu và kết thúc'); return; }
     setError('');
 
-    const giaTri = Number(discountValue.replace(/\D/g, '')) || 0;
+    const activeValue =
+      type === 'phan_tram' ? percentValue : type === 'so_tien' ? amountValue : '0';
+    const giaTri = Number(activeValue.replace(/\D/g, '')) || 0;
     const maxDa = maxDiscount ? Number(maxDiscount.replace(/\D/g, '')) : undefined;
     const donToiThieu = Number(minOrder.replace(/\D/g, '')) || 0;
     const luotToiDa = maxUse ? Number(maxUse) : undefined;
@@ -260,28 +267,28 @@ function PromoModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-[560px] rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-5">
+      <div className="relative w-full max-w-[500px] max-h-[88vh] overflow-y-auto rounded-[14px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-4">
           <h3 className="text-[17px] font-bold text-black">{isEdit ? 'Sửa thông tin khuyến mãi' : 'Thêm mã khuyến mãi'}</h3>
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f0f0f0] text-[18px] text-[#555] transition hover:bg-[#e0e0e0]">×</button>
         </div>
-        <div className="px-6 pb-6 pt-4 space-y-4">
+        <div className="space-y-3.5 px-5 pb-5 pt-3">
           {/* Name + Code */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[13px] font-medium text-black">Tên chương trình</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="VD: GIẢM 20% CUỐI TUẦN" className="mt-1 w-full rounded-[8px] border border-[#ddd] px-3 py-2 text-[14px] text-black outline-none focus:border-[#2e7d32]" />
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="VD: GIẢM 20% CUỐI TUẦN" className="mt-1 w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none focus:border-[#2e7d32]" />
             </div>
             <div>
               <label className="text-[13px] font-medium text-black">Mã khuyến mãi</label>
-              <input type="text" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="VD: SUMMER20" className="mt-1 w-full rounded-[8px] border border-[#ddd] px-3 py-2 text-[14px] text-black outline-none focus:border-[#2e7d32]" />
+              <input type="text" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="VD: SUMMER20" className="mt-1 w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none focus:border-[#2e7d32]" />
             </div>
           </div>
 
           {/* Type */}
           <div>
             <label className="text-[13px] font-bold text-black">Loại khuyến mãi</label>
-            <div className="mt-2 space-y-2">
+            <div className="mt-1.5 space-y-1.5">
               {types.map((t) => (
                 <div key={t.key} className="flex items-center gap-3">
                   <label className="flex cursor-pointer items-center gap-2" onClick={() => setType(t.key)}>
@@ -293,7 +300,7 @@ function PromoModal({
                   {t.key === 'phan_tram' && (
                     <div className="flex items-center gap-1">
                       <input
-                        type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
+                        type="number" value={percentValue} onChange={(e) => setPercentValue(e.target.value)}
                         disabled={type !== 'phan_tram'} placeholder="VD: 20"
                         className="w-[80px] rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none disabled:bg-[#f8f8f8]" />
                       <span className="text-[13px] text-[#555]">%</span>
@@ -308,7 +315,7 @@ function PromoModal({
                   {t.key === 'so_tien' && (
                     <div className="flex items-center gap-1">
                       <input
-                        type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
+                        type="number" value={amountValue} onChange={(e) => setAmountValue(e.target.value)}
                         disabled={type !== 'so_tien'} placeholder="VD: 15000"
                         className="w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none disabled:bg-[#f8f8f8]" />
                       <span className="text-[13px] text-[#555]">đ</span>
@@ -325,7 +332,7 @@ function PromoModal({
           {/* Conditions */}
           <div>
             <label className="text-[13px] font-bold text-black">Điều kiện áp dụng</label>
-            <div className="mt-2 space-y-2">
+            <div className="mt-1.5 space-y-1.5">
               <div className="flex items-center gap-3">
                 <span className="w-[140px] text-[13px] text-black">Đơn tối thiểu</span>
                 <div className="flex flex-1 items-center gap-1">
@@ -345,14 +352,14 @@ function PromoModal({
           {/* Time */}
           <div>
             <label className="text-[13px] font-bold text-black">Thời gian</label>
-            <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="mt-1.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[13px] text-black">Ngày bắt đầu</label>
                 <input
                   type="datetime-local"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full rounded-[8px] border border-[#ddd] px-3 py-2 text-[13px] text-black outline-none focus:border-[#2e7d32]"
+                  className="w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[13px] text-black outline-none focus:border-[#2e7d32]"
                 />
               </div>
               <div>
@@ -362,7 +369,7 @@ function PromoModal({
                   value={endDate}
                   min={startDate || undefined}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full rounded-[8px] border border-[#ddd] px-3 py-2 text-[13px] text-black outline-none focus:border-[#2e7d32]"
+                  className="w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[13px] text-black outline-none focus:border-[#2e7d32]"
                 />
               </div>
             </div>
@@ -374,7 +381,7 @@ function PromoModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="mt-2 w-full rounded-[8px] border border-[#ddd] px-3 py-2 text-[14px] text-black outline-none focus:border-[#2e7d32]"
+              className="mt-1.5 w-full rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none focus:border-[#2e7d32]"
             />
           </div>
 

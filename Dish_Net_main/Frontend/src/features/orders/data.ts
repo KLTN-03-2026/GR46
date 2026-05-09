@@ -24,6 +24,7 @@ export type UserOrder = {
     deliveredAt?: string;
     quickRating?: number;
     canRefund?: boolean;
+    canConfirmReceived?: boolean;
     canReview?: boolean;
     received?: boolean;
     cancelledAt?: string;

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MonAnEntity } from '../Admin/entities/mon-an.entity';
 import { DanhMucMonEntity } from '../Admin/entities/danh-muc-mon.entity';
@@ -25,10 +26,15 @@ import { GioHangChiTietEntity } from './entities/gio-hang-chi-tiet.entity';
 import { ThanhToanEntity } from './entities/thanh-toan.entity';
 import { DonHangKhuyenMaiEntity } from './entities/don-hang-khuyen-mai.entity';
 import { PhienThanhToanEntity } from './entities/phien-thanh-toan.entity';
+import { TaiKhoanRutTienEntity } from './entities/tai-khoan-rut-tien.entity';
+import { YeuCauRutTienEntity } from './entities/yeu-cau-rut-tien.entity';
+import { LuotNhanLinkBaiVietEntity } from './entities/luot-nhan-link-bai-viet.entity';
+import { LuotXemBaiVietEntity } from './entities/luot-xem-bai-viet.entity';
 import { UserContentController } from './user-content.controller';
 import { UserContentService } from './user-content.service';
 import { UserCommerceController } from './user-commerce.controller';
 import { UserCommerceService } from './user-commerce.service';
+import { ChatGateway } from './chat.gateway';
 import {
   UserVnpayApiPrefixedController,
   UserVnpayController,
@@ -36,6 +42,7 @@ import {
 
 @Module({
   imports: [
+    JwtModule.register({}),
     TypeOrmModule.forFeature([
       MonAnEntity,
       DanhMucMonEntity,
@@ -62,6 +69,10 @@ import {
       ThanhToanEntity,
       DonHangKhuyenMaiEntity,
       PhienThanhToanEntity,
+      TaiKhoanRutTienEntity,
+      YeuCauRutTienEntity,
+      LuotNhanLinkBaiVietEntity,
+      LuotXemBaiVietEntity,
     ]),
   ],
   controllers: [
@@ -70,6 +81,6 @@ import {
     UserVnpayController,
     UserVnpayApiPrefixedController,
   ],
-  providers: [UserContentService, UserCommerceService],
+  providers: [UserContentService, UserCommerceService, ChatGateway],
 })
 export class UserModule {}

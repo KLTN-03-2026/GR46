@@ -480,13 +480,23 @@ export default function CheckoutPageClient() {
       <div className="bg-[#f2f2f1]">
         <section className="mx-auto w-full max-w-[1160px] px-5 pb-14 pt-6 lg:px-8">
           <div className="mb-6 flex items-center gap-3">
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={() => {
+                const prev = sessionStorage.getItem('checkout_back');
+                if (prev) {
+                  sessionStorage.removeItem('checkout_back');
+                  router.push(prev);
+                } else {
+                  const storeId = preview?.groups?.[0]?.id_cua_hang;
+                  storeId ? router.push(`/explore/store/${storeId}/menu`) : router.back();
+                }
+              }}
               className="flex h-10 w-10 items-center justify-center rounded-full text-black transition hover:bg-white"
-              aria-label="Quay lại trang chủ"
+              aria-label="Quay lại trang trước"
             >
               <ChevronLeftIcon />
-            </Link>
+            </button>
             <h1 className="text-[28px] font-bold leading-none text-black lg:text-[30px]">
               Thanh toán
             </h1>
@@ -514,13 +524,23 @@ export default function CheckoutPageClient() {
     <div className="bg-[#f2f2f1]">
       <section className="mx-auto w-full max-w-[1160px] px-5 pb-14 pt-6 lg:px-8">
         <div className="mb-6 flex items-center gap-3">
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={() => {
+              const prev = sessionStorage.getItem('checkout_back');
+              if (prev) {
+                sessionStorage.removeItem('checkout_back');
+                router.push(prev);
+              } else {
+                const storeId = preview?.groups?.[0]?.id_cua_hang;
+                storeId ? router.push(`/explore/store/${storeId}/menu`) : router.back();
+              }
+            }}
             className="flex h-10 w-10 items-center justify-center rounded-full text-black transition hover:bg-white"
-            aria-label="Quay lại trang chủ"
+            aria-label="Quay lại trang trước"
           >
             <ChevronLeftIcon />
-          </Link>
+          </button>
           <h1 className="text-[28px] font-bold leading-none text-black lg:text-[30px]">
             Thanh toán
           </h1>

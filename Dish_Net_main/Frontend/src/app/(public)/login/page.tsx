@@ -1,10 +1,45 @@
 'use client';
 
 import Link from 'next/link';
+import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense, type ReactNode, useMemo, useState } from 'react';
+import { FormEvent, Suspense, type ReactNode, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/shared/AuthContext';
 import { authApi } from '@/shared/authApi';
+
+declare global {
+    interface Window {
+        google?: {
+            accounts?: {
+                id?: {
+                    initialize: (config: {
+                        client_id: string;
+                        callback: (response: { credential?: string }) => void;
+                        use_fedcm_for_prompt?: boolean;
+                        auto_select?: boolean;
+                    }) => void;
+                    prompt: (listener?: (notification: {
+                        isNotDisplayed?: () => boolean;
+                        isSkippedMoment?: () => boolean;
+                        getNotDisplayedReason?: () => string;
+                        getSkippedReason?: () => string;
+                    }) => void) => void;
+                    renderButton: (
+                        parent: HTMLElement,
+                        options: {
+                            theme?: 'outline' | 'filled_blue' | 'filled_black';
+                            size?: 'large' | 'medium' | 'small';
+                            text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+                            shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+                            width?: number;
+                        }
+                    ) => void;
+                    cancel?: () => void;
+                };
+            };
+        };
+    }
+}
 
 function EyeIcon({ open }: { open: boolean }) {
     return open ? (
@@ -103,6 +138,8 @@ function LoginPageContent() {
     const [submitted, setSubmitted] = useState(false);
     const [chonVaiTro, setChonVaiTro] = useState<{ email: string; danhSach: string[] } | null>(null);
     const [selectedVaiTro, setSelectedVaiTro] = useState('');
+    const googleButtonRef = useRef<HTMLDivElement | null>(null);
+    const isGoogleInitializedRef = useRef(false);
 
     const errors = useMemo(() => ({
         email: form.email.trim() ? '' : 'Vui lòng điền vào mục này.',
@@ -118,7 +155,7 @@ function LoginPageContent() {
         setLoading(true);
         try {
             const res = await authApi.dangNhap({
-                tai_khoan: form.email,
+                tai_khoan: form.email.trim(),
                 mat_khau: form.password,
                 luu_dang_nhap: rememberMe,
             });
@@ -148,7 +185,11 @@ function LoginPageContent() {
         if (!chonVaiTro) return;
         setLoading(true);
         try {
-            const res = await authApi.chonVaiTro({ email: chonVaiTro.email, vai_tro: selectedVaiTro });
+            const res = await authApi.chonVaiTro({
+                email: chonVaiTro.email,
+                vai_tro: selectedVaiTro,
+                luu_dang_nhap: rememberMe,
+            });
             capNhatNguoiDung({ ...res.nguoi_dung, vai_tro: res.vai_tro });
             setChonVaiTro(null);
             const defaultRoute = res.vai_tro === 'admin' ? '/admin' : res.vai_tro === 'chu_cua_hang' ? '/store' : '/';
@@ -157,6 +198,62 @@ function LoginPageContent() {
             setServerError(getErrorMessage(err, 'Chọn vai trò thất bại'));
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGoogleLogin = async (credential: string) => {
+        setLoading(true);
+        setServerError('');
+        try {
+            const res = await authApi.dangNhapGoogle({
+                credential,
+                luu_dang_nhap: rememberMe,
+            });
+            capNhatNguoiDung({ ...res.nguoi_dung, vai_tro: res.vai_tro });
+            const defaultRoute = res.vai_tro === 'admin' ? '/admin' : res.vai_tro === 'chu_cua_hang' ? '/store' : '/';
+            router.push(redirectTo || defaultRoute);
+        } catch (err: unknown) {
+            setServerError(getErrorMessage(err, 'Đăng nhập Google thất bại'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const initGoogleSignIn = () => {
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        if (!clientId) {
+            setServerError('Thiếu cấu hình Google Client ID');
+            return;
+        }
+        const gsi = window.google?.accounts?.id;
+        if (!gsi) {
+            setServerError('Google Sign-In chưa sẵn sàng, vui lòng thử lại');
+            return;
+        }
+        if (isGoogleInitializedRef.current) return;
+        isGoogleInitializedRef.current = true;
+        gsi.initialize({
+            client_id: clientId,
+            // Use classic popup flow from rendered Google button to avoid FedCM prompt issues.
+            use_fedcm_for_prompt: false,
+            auto_select: false,
+            callback: (response) => {
+                if (!response?.credential) {
+                    setServerError('Không nhận được thông tin xác thực Google');
+                    return;
+                }
+                void handleGoogleLogin(response.credential);
+            },
+        });
+        if (googleButtonRef.current) {
+            googleButtonRef.current.innerHTML = '';
+            gsi.renderButton(googleButtonRef.current, {
+                theme: 'filled_blue',
+                size: 'large',
+                text: 'signin_with',
+                shape: 'rectangular',
+                width: 360,
+            });
         }
     };
 
@@ -222,13 +319,13 @@ function LoginPageContent() {
 
                         <p className="mt-4 text-center text-[13px] text-[#8a8f98]">Hoặc đăng nhập bằng</p>
 
-                        <button type="button"
-                            className="mt-3 h-[44px] w-full rounded-[6px] bg-[#ef3b2d] text-[15px] font-bold text-white transition hover:bg-[#dc2f21]">
-                            Google
-                        </button>
+                        <div className="mt-3 flex justify-center">
+                            <div ref={googleButtonRef} />
+                        </div>
                     </form>
                 </div>
             </div>
+            <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={initGoogleSignIn} />
 
             {chonVaiTro && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

@@ -63,9 +63,9 @@ export class EmailService {
         tenNguoiDung: tenHienThi,
         otp,
         moTa: "Bạn vừa đăng ký tài khoản DishNet. Vui lòng nhập mã xác nhận bên dưới để hoàn tất đăng ký.",
-        thoiHan: "60 phút",
+        thoiHan: "2 phút",
       }),
-      noiDungText: `Xin chào ${tenHienThi}, mã OTP đăng ký DishNet của bạn là: ${otp}. Mã có hiệu lực trong 60 phút.`,
+      noiDungText: `Xin chào ${tenHienThi}, mã OTP đăng ký DishNet của bạn là: ${otp}. Mã có hiệu lực trong 2 phút.`,
     });
   }
 
@@ -82,9 +82,9 @@ export class EmailService {
         tenNguoiDung: tenHienThi,
         otp,
         moTa: "Bạn vừa yêu cầu đặt lại mật khẩu tài khoản DishNet. Vui lòng nhập mã xác nhận bên dưới để tiếp tục.",
-        thoiHan: "60 phút",
+        thoiHan: "2 phút",
       }),
-      noiDungText: `Xin chào ${tenHienThi}, mã OTP đặt lại mật khẩu DishNet của bạn là: ${otp}. Mã có hiệu lực trong 60 phút.`,
+      noiDungText: `Xin chào ${tenHienThi}, mã OTP đặt lại mật khẩu DishNet của bạn là: ${otp}. Mã có hiệu lực trong 2 phút.`,
     });
   }
 

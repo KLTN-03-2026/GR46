@@ -101,14 +101,93 @@ export const userContentApi = {
       body: JSON.stringify(body),
     }),
 
+  toggleThichBinhLuan: (idBinhLuan: number) =>
+    request<{ da_tuong_tac: boolean; hanh_dong: string; tong_luot: number }>(
+      `/user/binh-luan/${idBinhLuan}/tuong-tac/thich`,
+      { method: 'POST' },
+    ),
+
+  uploadTepBaiViet: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request<{ url: string; loai_tep: string }>('/user/bai-viet/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  taoBaiViet: (body: {
+    noi_dung?: string;
+    tep_dinh_kem?: string[];
+    muc_do_hien_thi?: 'cong_khai' | 'ban_be';
+    bat_kiem_tien?: boolean;
+    link_mon_an?: string;
+  }) =>
+    request<{
+      id: number;
+      loai_bai_viet: string;
+      noi_dung: string | null;
+      ngay_dang: string;
+      tep_dinh_kem: Array<{ loai_tep: string; url: string }>;
+      tong_luot_thich: number;
+      tong_luot_binh_luan: number;
+      tong_luot_chia_se: number;
+      muc_do_hien_thi?: 'cong_khai' | 'ban_be';
+      bat_kiem_tien?: boolean;
+      link_mon_an?: string | null;
+      id_mon_an?: number | null;
+    }>('/user/bai-viet', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  capNhatBaiViet: (idBaiViet: number, body: {
+    noi_dung?: string;
+    tep_dinh_kem?: string[];
+    muc_do_hien_thi?: 'cong_khai' | 'ban_be';
+    bat_kiem_tien?: boolean;
+    link_mon_an?: string;
+  }) =>
+    request<{
+      id: number;
+      loai_bai_viet: string;
+      noi_dung: string | null;
+      ngay_dang: string;
+      tep_dinh_kem: Array<{ loai_tep: string; url: string }>;
+      tong_luot_thich: number;
+      tong_luot_binh_luan: number;
+      tong_luot_chia_se: number;
+      muc_do_hien_thi?: 'cong_khai' | 'ban_be';
+      bat_kiem_tien?: boolean;
+      link_mon_an?: string | null;
+      id_mon_an?: number | null;
+    }>(`/user/bai-viet/${idBaiViet}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  xoaBaiViet: (idBaiViet: number) =>
+    request<{ id: number; trang_thai_duyet: string; message: string }>(`/user/bai-viet/${idBaiViet}`, {
+      method: 'DELETE',
+    }),
+
+  nhanLinkMonBaiViet: (idBaiViet: number) =>
+    request<{ url: string; id_mon_an: number | null }>(`/user/bai-viet/${idBaiViet}/link-mon`),
+
   toggleThichBaiViet: (idBaiViet: number) =>
     request(`/user/bai-viet/${idBaiViet}/tuong-tac/thich`, { method: 'POST' }),
 
   toggleLuuBaiViet: (idBaiViet: number) =>
     request(`/user/bai-viet/${idBaiViet}/tuong-tac/luu`, { method: 'POST' }),
 
-  chiaSeBaiViet: (idBaiViet: number) =>
-    request(`/user/bai-viet/${idBaiViet}/tuong-tac/chia-se`, { method: 'POST' }),
+  chiaSeBaiViet: (
+    idBaiViet: number,
+    body?: { muc_do_hien_thi?: 'cong_khai' | 'ban_be' },
+  ) =>
+    request(`/user/bai-viet/${idBaiViet}/tuong-tac/chia-se`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 
   baoCaoBaiViet: (
     idBaiViet: number,
@@ -173,6 +252,15 @@ export const userContentApi = {
   layTrangThaiTuongTacNguoiDung: (idNguoiDung: number) =>
     request(`/user/nguoi-dung/${idNguoiDung}/tuong-tac`),
 
+  layDanhSachDangTheoDoi: (tuKhoa?: string) =>
+    request(`/user/nguoi-dung/danh-sach-dang-theo-doi${tuKhoa ? `?tu_khoa=${encodeURIComponent(tuKhoa)}` : ''}`),
+
+  layDanhSachNguoiTheoDoi: (tuKhoa?: string) =>
+    request(`/user/nguoi-dung/danh-sach-nguoi-theo-doi${tuKhoa ? `?tu_khoa=${encodeURIComponent(tuKhoa)}` : ''}`),
+
+  xoaNguoiTheoDoi: (idNguoiDung: number) =>
+    request(`/user/nguoi-dung/${idNguoiDung}/xoa-nguoi-theo-doi`, { method: 'DELETE' }),
+
   toggleTheoDoiNguoiDung: (idNguoiDung: number) =>
     request(`/user/nguoi-dung/${idNguoiDung}/theo-doi`, { method: 'POST' }),
 
@@ -198,6 +286,8 @@ export const userContentApi = {
     kinh_do?: number;
     ban_kinh_km?: number;
   }) => request(`/user/kham-pha${toQueryString(query)}`),
+
+  layChiTietCuaHang: (idCuaHang: number) => request(`/user/cua-hang/${idCuaHang}`),
 
   layMonTheoDanhMuc: (
     idDanhMuc: number,

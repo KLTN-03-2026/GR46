@@ -18,7 +18,7 @@ export const homePageBaseData: HomePageData = {
         backgroundImage: heroBanner,
         collageImage: dishCollage,
     },
-    filters: ['Danh mục', 'Ẩm thực', 'Quận / Huyện'],
+    filters: ['Danh mục', 'Ẩm thực', 'Thời gian'],
     rankings: {
         stores: [],
         reviewers: [],
@@ -51,6 +51,20 @@ function formatDate(value?: string | null) {
     return date.toLocaleDateString('vi-VN');
 }
 
+function extractMediaUrls(input: unknown): string[] {
+    if (!Array.isArray(input)) return [];
+    return input
+        .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object' && 'url' in item) {
+                const value = (item as { url?: unknown }).url;
+                return typeof value === 'string' ? value : '';
+            }
+            return '';
+        })
+        .filter(Boolean);
+}
+
 export function mapFeedPosts(feedPayload: any) {
     return Array.isArray(feedPayload?.bai_viet)
         ? feedPayload.bai_viet.map((item: any) => ({
@@ -61,7 +75,7 @@ export function mapFeedPosts(feedPayload: any) {
             storeName: item?.cua_hang?.ten_cua_hang ? String(item.cua_hang.ten_cua_hang) : undefined,
             author: item?.thong_tin_nguoi_dang?.ten_hien_thi || 'Người dùng',
             authorAvatar: item?.thong_tin_nguoi_dang?.anh_dai_dien || reviewerAvatar,
-            date: item?.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+            date: String(item?.ngay_dang ?? ''),
             rating:
                 item?.so_sao != null && Number(item.so_sao) > 0
                     ? Number(item.so_sao).toFixed(1)
@@ -76,18 +90,18 @@ export function mapFeedPosts(feedPayload: any) {
             shareCount: Number(item?.tong_tuong_tac?.luot_chia_se ?? 0),
             saveCount: Number(item?.tong_tuong_tac?.luot_luu ?? 0),
             isLiked: Boolean(item?.trang_thai_tuong_tac?.da_thich),
-            images: (Array.isArray(item?.tep_dinh_kem)
-                ? item.tep_dinh_kem.filter((image: unknown): image is string => typeof image === 'string')
-                : []).slice(0, 2),
+            dishLink: typeof item?.link_mon_an === 'string' && item.link_mon_an.trim().length > 0
+                ? item.link_mon_an.trim()
+                : undefined,
+            dishId: item?.id_mon_an != null ? Number(item.id_mon_an) : undefined,
+            images: extractMediaUrls(item?.tep_dinh_kem).slice(0, 2),
             sharedPost: item?.bai_viet_goc
                 ? {
                     id: String(item.bai_viet_goc.id),
                     author: String(item.bai_viet_goc?.thong_tin_nguoi_dang?.ten_hien_thi ?? 'Người dùng'),
-                    date: item.bai_viet_goc?.ngay_dang ? new Date(item.bai_viet_goc.ngay_dang).toLocaleDateString('vi-VN') : '',
+                    date: String(item.bai_viet_goc?.ngay_dang ?? ''),
                     content: String(item.bai_viet_goc?.noi_dung ?? ''),
-                    images: (Array.isArray(item.bai_viet_goc?.tep_dinh_kem)
-                        ? item.bai_viet_goc.tep_dinh_kem.filter((image: unknown): image is string => typeof image === 'string')
-                        : []).slice(0, 2),
+                    images: extractMediaUrls(item.bai_viet_goc?.tep_dinh_kem).slice(0, 2),
                 }
                 : undefined,
         }))
@@ -130,7 +144,7 @@ export function mapDeals(feedPayload: any) {
     }));
 }
 
-export async function getBangTinPage(trang: number, soLuong = 12) {
+export async function getBangTinPage(trang: number, soLuong = 10) {
     const feedPayload: any = await userContentApi.layBangTin({ trang, so_luong: soLuong });
     const spotlightCards = mapDeals(feedPayload);
     const feedPosts = mapFeedPosts(feedPayload);
@@ -162,7 +176,7 @@ export async function getBangTinPage(trang: number, soLuong = 12) {
 export async function getHomePageData(): Promise<HomePageData> {
     try {
         const [{ feedPayload, spotlightCards, feedPosts, menuCategories, menuItems }, miniPayload] = await Promise.all([
-            getBangTinPage(1, 12),
+            getBangTinPage(1, 10),
             userContentApi.layBangXepHangMini({ so_luong: 6 }) as Promise<any>,
         ]);
         const deals = Array.isArray(feedPayload?.deal_hom_nay) ? feedPayload.deal_hom_nay : [];
@@ -193,7 +207,7 @@ export async function getHomePageData(): Promise<HomePageData> {
             feedPagination: {
                 tong_so: Number(feedPayload?.phan_trang_bai_viet?.tong_so ?? feedPosts.length),
                 trang: Number(feedPayload?.phan_trang_bai_viet?.trang ?? 1),
-                so_luong: Number(feedPayload?.phan_trang_bai_viet?.so_luong ?? 12),
+                so_luong: Number(feedPayload?.phan_trang_bai_viet?.so_luong ?? 10),
                 tong_trang: Number(feedPayload?.phan_trang_bai_viet?.tong_trang ?? 1),
             },
             orderPreview: {

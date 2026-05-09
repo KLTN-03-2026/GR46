@@ -45,7 +45,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const message = isApiEnvelope(body) ? body.message : body?.message;
-    throw new Error(message || 'Co loi xay ra');
+    throw new Error(message || 'Có lỗi xảy ra');
   }
 
   return payload as T;
@@ -92,7 +92,7 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
 
-  chonVaiTro: (body: { email: string; vai_tro: string }) =>
+  chonVaiTro: (body: { email: string; vai_tro: string; luu_dang_nhap?: boolean }) =>
     request<{
       access_token: string;
       vai_tro: string;
@@ -104,6 +104,22 @@ export const authApi = {
         ten_dang_nhap: string;
       };
     }>('/auth/chon-vai-tro', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  dangNhapGoogle: (body: { credential: string; luu_dang_nhap?: boolean }) =>
+    request<{
+      access_token: string;
+      vai_tro: string;
+      nguoi_dung: {
+        id: number;
+        email: string;
+        ten_hien_thi: string;
+        anh_dai_dien: string | null;
+        ten_dang_nhap: string;
+      };
+    }>('/auth/google', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

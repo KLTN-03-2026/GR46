@@ -127,10 +127,6 @@ export class AdminDashboardService {
           .getCount(),
         this.donHangRepo
           .createQueryBuilder("dh")
-          .where("dh.thoi_gian_dat BETWEEN :tuNgay AND :denNgay", {
-            tuNgay: range.tu_ngay,
-            denNgay: range.den_ngay,
-          })
           .getCount(),
         this.donHangRepo
           .createQueryBuilder("dh")

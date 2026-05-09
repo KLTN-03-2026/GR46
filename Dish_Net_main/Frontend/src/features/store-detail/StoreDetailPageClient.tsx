@@ -47,6 +47,8 @@ const PACKAGING_OPTIONS: DishOption[] = [
     { id: 'dong-goi-thuong', label: 'Đựng túi bóng', extraPrice: 0 },
     { id: 'dong-goi-to-dua', label: 'Đựng túi bóng + Tô đũa muỗng', extraPrice: 2000 },
 ];
+const MAX_DISTINCT_CART_ITEMS = 50;
+const MAX_QUANTITY_PER_ITEM = 50;
 
 function parseCurrency(value: string) {
     const normalized = value.replace(/[^\d]/g, '');
@@ -65,23 +67,17 @@ function normalizeText(value: string) {
         .trim();
 }
 
-function QuickAction({ label, onClick }: { label: string; onClick?: () => void }) {
-    const clickable = typeof onClick === 'function';
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={!clickable}
-            className={`rounded-[8px] bg-white px-6 py-3 text-[15px] font-medium text-[#4b5563] shadow-[0_2px_8px_rgba(0,0,0,0.05)] transition ${
-                clickable ? 'hover:bg-[#f8fafc]' : 'cursor-not-allowed opacity-60'
-            }`}
-        >
-            {label}
-        </button>
-    );
-}
+
+const IconHeart = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+);
+const IconComment = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+);
 
 function ReviewerCard({
+    userId,
+    avatar,
     author,
     date,
     excerpt,
@@ -89,18 +85,35 @@ function ReviewerCard({
     gallery,
     onRequireLogin,
     onOrderNow,
+    onNavigateToProfile,
 }: StoreDetailData['reviewCards'][number] & {
     onRequireLogin?: () => void;
     onOrderNow?: () => void;
+    onNavigateToProfile?: (userId: string) => void;
 }) {
     return (
         <article className="rounded-[18px] border border-[#ebe5dd] bg-[#fff6ee] p-5 shadow-[0_8px_22px_rgba(0,0,0,0.05)]">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ffe0b6] text-[20px]">👥</div>
+                    <button
+                        type="button"
+                        onClick={() => userId && onNavigateToProfile ? onNavigateToProfile(userId) : undefined}
+                        className={userId ? 'cursor-pointer' : 'cursor-default'}
+                    >
+                        {avatar
+                            ? <img src={avatar} alt={author} className="h-14 w-14 rounded-full object-cover" />
+                            : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ffe0b6] text-[20px]">👥</div>
+                        }
+                    </button>
                     <div>
                         <div className="flex items-center gap-3">
-                            <h3 className="text-[18px] font-bold text-[#172554]">{author}</h3>
+                            <button
+                                type="button"
+                                onClick={() => userId && onNavigateToProfile ? onNavigateToProfile(userId) : undefined}
+                                className={`text-[18px] font-bold text-[#172554] ${userId ? 'hover:underline' : ''}`}
+                            >
+                                {author}
+                            </button>
                             <span className="rounded-full bg-[#ffe9bd] px-3 py-1 text-xs font-bold text-[#6b4b00]">TOP REVIEWER</span>
                         </div>
                         <p className="text-sm text-[#6b7280]">{date}</p>
@@ -122,15 +135,18 @@ function ReviewerCard({
                 <span>⏰ Tốc độ phục vụ <b className="text-[#f59e0b]">4.7</b></span>
             </div>
 
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_90px_90px_48px] gap-2">
-                <img src={heroImage} alt={author} className="h-[146px] w-full rounded-[12px] object-cover" />
-                {gallery.slice(0, 3).map((image, index) => (
-                    <img key={index} src={image} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                ))}
-                <button onClick={onRequireLogin} className="row-span-2 rounded-[14px] bg-[#e85f5f] text-sm font-bold text-white">Xem thêm</button>
-                {gallery.slice(1, 3).map((image, index) => (
-                    <img key={`row-${index}`} src={image} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                ))}
+            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_90px_90px] gap-2">
+                <img src={heroImage} alt={author} className="row-span-2 h-full min-h-[146px] w-full rounded-[12px] object-cover" />
+                <img src={gallery[0] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
+                <img src={gallery[1] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
+                <img src={gallery[2] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
+                <button
+                    onClick={onRequireLogin}
+                    className="relative h-[68px] w-full overflow-hidden rounded-[12px]"
+                >
+                    <img src={gallery[3] ?? gallery[2] ?? heroImage} alt="" className="h-full w-full object-cover brightness-50" />
+                    <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">Xem thêm</span>
+                </button>
             </div>
 
             <p className="mt-4 text-[15px] leading-8 text-[#3f3f46]">{excerpt}</p>
@@ -143,8 +159,12 @@ function ReviewerCard({
 
             <div className="mt-4 flex items-center justify-between border-t border-[#efe5d9] pt-4">
                 <div className="flex items-center gap-8 text-[15px] text-[#4b5563]">
-                    <button onClick={onRequireLogin}>♡ Yêu thích</button>
-                    <span>◔ Bình luận</span>
+                    <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-red-500">
+                        <IconHeart /> Yêu thích
+                    </button>
+                    <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#2f9e2f]">
+                        <IconComment /> Bình luận
+                    </button>
                 </div>
                 <button
                     onClick={onOrderNow}
@@ -157,14 +177,37 @@ function ReviewerCard({
     );
 }
 
-function UserCommentCard({ comment }: { comment: StoreDetailData['comments'][number] }) {
+function UserCommentCard({
+    comment,
+    onRequireLogin,
+    onNavigateToProfile,
+}: {
+    comment: StoreDetailData['comments'][number];
+    onRequireLogin?: () => void;
+    onNavigateToProfile?: (userId: string) => void;
+}) {
     return (
         <article className="rounded-[18px] bg-white p-8 shadow-[0_10px_28px_rgba(0,0,0,0.08)]">
             <div className="flex items-start justify-between gap-4 border-b border-[#e9efe6] pb-5">
                 <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ececec] text-xl">👤</div>
+                    <button
+                        type="button"
+                        onClick={() => comment.userId && onNavigateToProfile ? onNavigateToProfile(comment.userId) : undefined}
+                        className={comment.userId ? 'cursor-pointer' : 'cursor-default'}
+                    >
+                        {comment.avatar
+                            ? <img src={comment.avatar} alt={comment.author} className="h-14 w-14 rounded-full object-cover" />
+                            : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ececec] text-xl">👤</div>
+                        }
+                    </button>
                     <div>
-                        <h3 className="text-[18px] font-bold text-[#1f2937]">{comment.author}</h3>
+                        <button
+                            type="button"
+                            onClick={() => comment.userId && onNavigateToProfile ? onNavigateToProfile(comment.userId) : undefined}
+                            className={`text-[18px] font-bold text-[#1f2937] ${comment.userId ? 'hover:underline' : ''}`}
+                        >
+                            {comment.author}
+                        </button>
                         <p className="text-sm text-[#6b7280]">{comment.source} • {comment.date}</p>
                     </div>
                 </div>
@@ -186,9 +229,16 @@ function UserCommentCard({ comment }: { comment: StoreDetailData['comments'][num
             </div>
 
             <div className="mt-5 flex items-center gap-8 text-[15px] text-[#6b7280]">
-                <span>♥ Thích</span>
-                <span>💬 Thảo luận</span>
-                <span>⚠ Báo lỗi</span>
+                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-red-500">
+                    <IconHeart /> Thích
+                </button>
+                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#2f9e2f]">
+                    <IconComment /> Thảo luận
+                </button>
+                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#f59e0b]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Báo lỗi
+                </button>
             </div>
         </article>
     );
@@ -259,6 +309,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const [isAddingToCart, setIsAddingToCart] = useState(false);
 
     const visibleMenu = useMemo(() => store.menuItems.slice(0, 10), [store.menuItems]);
+    const hasReviews = store.reviewCards.length > 0;
     const openLoginRequired = () => setIsLoginRequiredOpen(true);
 
     const menuCategories = useMemo(
@@ -325,8 +376,10 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                     }),
                 )
                 .filter(
-                    (entry): entry is StoreCartSummaryItem =>
-                        Boolean(entry) && entry.quantity > 0,
+                    (entry): entry is StoreCartSummaryItem => {
+                        if (!entry) return false;
+                        return entry.quantity > 0;
+                    },
                 );
 
             setCartSummary(mapped);
@@ -432,6 +485,33 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                 return false;
             }
 
+            const cartPayload = (await userCommerceApi.layGioHang()) as {
+                groups?: CartApiGroup[];
+            };
+            const groups = Array.isArray(cartPayload?.groups) ? cartPayload.groups : [];
+            const allItems = groups.flatMap((group) =>
+                Array.isArray(group?.items) ? group.items : [],
+            );
+            const existing = allItems.find(
+                (cartItem) => Number(cartItem?.id_mon_an) === monAnId,
+            );
+            const distinctCount = allItems.length;
+
+            if (!existing && distinctCount >= MAX_DISTINCT_CART_ITEMS) {
+                setCartActionError(
+                    `Giỏ hàng chỉ chứa tối đa ${MAX_DISTINCT_CART_ITEMS} món khác nhau.`,
+                );
+                return false;
+            }
+
+            const currentQuantity = Number(existing?.so_luong ?? 0);
+            if (currentQuantity + quantity > MAX_QUANTITY_PER_ITEM) {
+                setCartActionError(
+                    `Mỗi món chỉ được tối đa ${MAX_QUANTITY_PER_ITEM} phần.`,
+                );
+                return false;
+            }
+
             await userCommerceApi.themVaoGioHang({
                 id_mon_an: monAnId,
                 so_luong: quantity,
@@ -460,11 +540,10 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     };
 
     const openMenuModal = (item?: MenuItem) => {
-        setIsReviewModalOpen(false);
-        setIsMenuModalOpen(true);
         if (item) {
-            openDishDetail(item);
+            void item;
         }
+        router.push(`/explore/store/${store.id}/menu`);
     };
 
     const closeMenuModal = () => {
@@ -544,7 +623,9 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
             <section className="mx-auto flex w-full max-w-[1440px] flex-col gap-8 px-5 md:px-8">
                 <article id="top" className="overflow-hidden rounded-[20px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
                     <div className="grid lg:grid-cols-[1.15fr_1.65fr]">
-                        <img src={store.coverImage} alt={store.title} className="h-full min-h-[340px] w-full object-cover" />
+                        <div className="h-[260px] overflow-hidden sm:h-[340px] lg:h-[420px]">
+                            <img src={store.coverImage} alt={store.title} className="h-full w-full object-cover" />
+                        </div>
                         <div className="p-6 md:p-7">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
@@ -616,12 +697,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                     </aside>
 
                     <div className="space-y-8">
-                        <div className="flex flex-wrap items-center justify-end gap-4 bg-[#e9ece6] px-6 py-4">
-                            <QuickAction label="📞 Gọi điện thoại" />
-                            <QuickAction label="Danh Mục ⌄" />
-                            <QuickAction label="🔖 Lưu" onClick={openLoginRequired} />
-                            <QuickAction label="🔗 Chia Sẻ" />
-                        </div>
 
                         <section id="menu" className="overflow-hidden rounded-[22px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
                             <div className="p-8">
@@ -630,15 +705,15 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                 <div className="mt-5 grid gap-x-10 gap-y-4 md:grid-cols-2">
                                     {visibleMenu.map((item) => (
                                         <article key={item.id} className="flex items-center gap-4 border-b border-[#f0f2ed] py-3">
-                                            <img src={item.image} alt={item.name} className="h-16 w-16 rounded-[8px] object-cover" />
-                                            <div className="min-w-0 flex-1">
+                                            <img src={item.image} alt={item.name} className="h-16 w-16 cursor-pointer rounded-[8px] object-cover" onClick={() => openDishDetail(item)} />
+                                            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => openDishDetail(item)}>
                                                 <h3 className="truncate text-[18px] font-bold text-[#1f2937]">{item.name}</h3>
                                                 <p className="text-sm text-[#9ca3af]">{item.note}</p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-[18px] font-bold text-[#2f71ff]">{item.price}</p>
                                                 <button
-                                                    onClick={() => openMenuModal(item)}
+                                                    onClick={() => openDishDetail(item)}
                                                     className="mt-2 h-8 w-8 rounded-[8px] bg-[#ff5a2c] text-lg font-bold text-white"
                                                 >
                                                     +
@@ -664,15 +739,18 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                         {...review}
                                         onRequireLogin={openLoginRequired}
                                         onOrderNow={() => openMenuModal()}
+                                        onNavigateToProfile={(userId) => router.push(`/profile/${userId}`)}
                                     />
                                 ))}
                             </div>
-                            <button
-                                onClick={() => setIsReviewModalOpen(true)}
-                                className="w-full rounded-[8px] bg-[#d7f5cf] px-6 py-5 text-[22px] font-medium text-[#2e7d18]"
-                            >
-                                Xem Thêm Bài Review →
-                            </button>
+                            {hasReviews ? (
+                                <button
+                                    onClick={() => setIsReviewModalOpen(true)}
+                                    className="w-full rounded-[8px] bg-[#d7f5cf] px-6 py-5 text-[22px] font-medium text-[#2e7d18]"
+                                >
+                                    Xem Thêm Bài Review →
+                                </button>
+                            ) : null}
                         </section>
 
                         <section id="community" className="rounded-[22px] bg-white p-8 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
@@ -703,7 +781,12 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                             </article>
 
                             {store.comments.map((comment) => (
-                                <UserCommentCard key={comment.id} comment={comment} />
+                                <UserCommentCard
+                                    key={comment.id}
+                                    comment={comment}
+                                    onRequireLogin={openLoginRequired}
+                                    onNavigateToProfile={(userId) => router.push(`/profile/${userId}`)}
+                                />
                             ))}
                         </section>
                     </div>
@@ -952,7 +1035,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => router.push('/checkout')}
+                                                    onClick={() => { sessionStorage.setItem('checkout_back', window.location.pathname); router.push('/checkout'); }}
                                                     className="mt-4 w-full rounded-[12px] bg-[#2f9e2f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#257f25]"
                                                 >
                                                     Tiến hành đặt món
@@ -1050,7 +1133,15 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                         <span className="w-8 text-center text-[24px] font-medium text-black">{dishQuantity}</span>
                                         <button
                                             type="button"
-                                            onClick={() => setDishQuantity((value) => value + 1)}
+                                            onClick={() => {
+                                                if (dishQuantity >= MAX_QUANTITY_PER_ITEM) {
+                                                    setCartActionError(
+                                                        `Mỗi món chỉ được tối đa ${MAX_QUANTITY_PER_ITEM} phần.`,
+                                                    );
+                                                    return;
+                                                }
+                                                setDishQuantity((value) => value + 1);
+                                            }}
                                             className="flex h-[36px] w-[40px] items-center justify-center rounded-[9px] bg-[#f59e0b] text-[24px] font-medium text-white"
                                             aria-label="Tăng số lượng"
                                         >

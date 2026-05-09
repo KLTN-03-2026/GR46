@@ -308,6 +308,7 @@ function DetailCard({
     order,
     onBack,
     onCancel,
+    onConfirmReceived,
     onRefund,
     onReview,
     onReorder,
@@ -315,6 +316,7 @@ function DetailCard({
     order: UserOrder;
     onBack: () => void;
     onCancel: () => void;
+    onConfirmReceived: () => void;
     onRefund: () => void;
     onReview: () => void;
     onReorder: () => void;
@@ -399,6 +401,15 @@ function DetailCard({
                             className="rounded-full border border-[#d7d7d7] bg-[#f7f7f7] px-8 py-2.5 text-[15px] font-semibold text-black"
                         >
                             Yêu cầu hoàn tiền
+                        </button>
+                    ) : null}
+                    {order.canConfirmReceived ? (
+                        <button
+                            type="button"
+                            onClick={onConfirmReceived}
+                            className="rounded-full bg-[#299a2e] px-8 py-2.5 text-[15px] font-semibold text-white"
+                        >
+                            Đã nhận hàng
                         </button>
                     ) : null}
                 </div>
@@ -576,6 +587,15 @@ function DetailCard({
                         Viết đánh giá
                     </button>
                 ) : null}
+                {order.canConfirmReceived ? (
+                    <button
+                        type="button"
+                        onClick={onConfirmReceived}
+                        className="min-w-[200px] rounded-[12px] bg-[#299a2e] px-8 py-4 text-[17px] font-semibold text-white"
+                    >
+                        Đã nhận hàng
+                    </button>
+                ) : null}
                 {canCancelOrder(order) ? (
                     <button
                         type="button"
@@ -658,6 +678,7 @@ export default function UserOrdersPageClient() {
             orderedAt: formatDateTime(item?.thoi_gian_dat),
             deliveredAt: formatDateTime(item?.thoi_gian_giao),
             canRefund: Boolean(item?.co_the_hoan_tien),
+            canConfirmReceived: Boolean(item?.co_the_xac_nhan_da_nhan),
             canReview: Boolean(item?.co_the_danh_gia),
             received: Boolean(item?.da_danh_gia),
             refundStatus:
@@ -731,6 +752,7 @@ export default function UserOrdersPageClient() {
             paidAt: formatDateTime(payment?.thoi_gian_thanh_toan),
             deliveredAt: formatDateTime(item?.thoi_gian_giao),
             canRefund: statusDb === 'da_giao',
+            canConfirmReceived: Boolean(item?.co_the_xac_nhan_da_nhan) || statusDb === 'dang_giao',
             canReview: statusDb === 'da_giao' && !item?.danh_gia_cua_toi,
             received: Boolean(item?.danh_gia_cua_toi),
             cancelledAt:
@@ -919,6 +941,25 @@ export default function UserOrdersPageClient() {
         }
     };
 
+    const handleConfirmReceived = async (order: UserOrder) => {
+        try {
+            setActionError(null);
+            await userCommerceApi.xacNhanDaGiao(order.id);
+            toast.success('Đã xác nhận nhận hàng thành công.');
+            setSelectedOrderId(null);
+            setDetailOrder(null);
+            await loadOrders();
+            navigateToTab('purchased');
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Không thể xác nhận nhận hàng';
+            setActionError(message);
+            toast.error(message);
+        }
+    };
+
     const content = isLoading ? (
         <div className="flex min-h-[520px] items-center justify-center rounded-[20px] bg-white px-7 text-center shadow-[0_8px_22px_rgba(0,0,0,0.03)]">
             <p className="text-[16px] text-[#5f6f60]">Đang tải dữ liệu đơn hàng...</p>
@@ -932,6 +973,7 @@ export default function UserOrdersPageClient() {
             order={selectedOrder}
             onBack={() => setSelectedOrderId(null)}
             onCancel={() => setCancellingOrderId(selectedOrder.id)}
+            onConfirmReceived={() => void handleConfirmReceived(selectedOrder)}
             onRefund={() => setRefundOrderId(selectedOrder.id)}
             onReview={() => setReviewOrderId(selectedOrder.id)}
             onReorder={() => void handleReorder(selectedOrder)}

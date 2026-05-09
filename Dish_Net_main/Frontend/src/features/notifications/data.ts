@@ -4,6 +4,9 @@ export type NotificationItem = {
     id: string;
     avatar: string;
     type: 'like' | 'support' | 'follow' | 'comment';
+    loaiThongBao?: string;
+    loaiDoiTuong?: string;
+    idDoiTuong?: number | null;
     message: string;
     time: string;
     isRead?: boolean;
@@ -18,6 +21,25 @@ function mapType(loai?: string): NotificationItem['type'] {
     if (loai.includes('binh_luan')) return 'comment';
     if (loai.includes('theo_doi')) return 'follow';
     return 'support';
+}
+
+export function resolveNotificationTarget(item: Pick<NotificationItem, 'loaiThongBao' | 'idDoiTuong'>): string {
+    const loai = String(item.loaiThongBao ?? '').toLowerCase();
+    const id = Number(item.idDoiTuong ?? 0);
+
+    if (loai.includes('ho_tro')) {
+        return id > 0 ? `/user/support?request=${id}` : '/user/support';
+    }
+
+    if (loai.includes('tuong_tac') || loai.includes('binh_luan') || loai.includes('theo_doi')) {
+        return id > 0 ? `/?post_id=${id}` : '/';
+    }
+
+    if (loai.includes('bao_cao')) {
+        return '/notifications';
+    }
+
+    return '/notifications';
 }
 
 function formatRelativeTime(input?: string | Date | null) {
@@ -45,6 +67,9 @@ export async function getNotificationItems(): Promise<NotificationItem[]> {
             id: String(item.id ?? `notification-${index}`),
             avatar: String(item?.nguoi_nhan?.anh_dai_dien ?? fallbackAvatar),
             type: mapType(String(item.loai_thong_bao ?? '')),
+            loaiThongBao: String(item.loai_thong_bao ?? ''),
+            loaiDoiTuong: String(item.loai_doi_tuong ?? ''),
+            idDoiTuong: item.id_doi_tuong != null ? Number(item.id_doi_tuong) : null,
             message: String(item.tieu_de || item.noi_dung || 'Bạn có thông báo mới'),
             time: formatRelativeTime(item.ngay_tao),
             isRead: Boolean(item.da_doc),

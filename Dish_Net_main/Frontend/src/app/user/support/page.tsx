@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
 /* ───────── types ───────── */
@@ -75,11 +76,13 @@ type ViewState =
    MAIN PAGE COMPONENT
    ═══════════════════════════════════════════ */
 export default function UserSupportPage() {
+    const searchParams = useSearchParams();
     const [view, setView] = useState<ViewState>({ type: 'main' });
     const [requests, setRequests] = useState<SupportRequest[]>([]);
     const [searchHelp, setSearchHelp] = useState('');
     const [isLoadingRequests, setIsLoadingRequests] = useState(false);
     const [requestsError, setRequestsError] = useState<string | null>(null);
+    const [uploadingFiles, setUploadingFiles] = useState(false);
 
     const mapListItemToRequest = useCallback((item: any): SupportRequest => {
         const guiLuc = item?.thoi_gian_gui ? new Date(item.thoi_gian_gui) : null;
@@ -113,11 +116,37 @@ export default function UserSupportPage() {
         };
     }, []);
 
+    const moChiTietYeuCau = useCallback(async (req: SupportRequest) => {
+        try {
+            const detail: any = await userCommerceApi.layChiTietHoTro(req.apiId);
+            const parsed = tachNoiDungVaLienHe(detail?.noi_dung_yeu_cau);
+            const guiLuc = detail?.thoi_gian_gui ? new Date(detail.thoi_gian_gui) : null;
+            const detailRequest: SupportRequest = {
+                id: detail?.ma_yeu_cau ? String(detail.ma_yeu_cau) : req.id,
+                apiId: Number(detail?.id ?? req.apiId),
+                topic: detail?.chu_de ?? req.topic,
+                content: parsed.content || req.content,
+                contact: parsed.contact || req.contact,
+                date: guiLuc ? guiLuc.toLocaleDateString('vi-VN') : req.date,
+                status: detail?.trang_thai === 'da_giai_quyet' ? 'resolved' : 'pending',
+                response: detail?.thong_tin_phan_hoi?.noi_dung_phan_hoi ?? req.response,
+                attachments: Array.isArray(detail?.tep_dinh_kem)
+                    ? detail.tep_dinh_kem
+                          .map((item: any) => item?.url)
+                          .filter((item: unknown) => typeof item === 'string')
+                    : [],
+            };
+            setView({ type: 'detail', request: detailRequest });
+        } catch {
+            setView({ type: 'detail', request: req });
+        }
+    }, [tachNoiDungVaLienHe]);
+
     const loadRequests = useCallback(async () => {
         setIsLoadingRequests(true);
         setRequestsError(null);
         try {
-            const data: any = await userCommerceApi.layDanhSachHoTro({ so_luong: 100 });
+            const data: any = await userCommerceApi.layDanhSachHoTro({ so_luong: 50 });
             const mapped = Array.isArray(data?.du_lieu)
                 ? data.du_lieu.map(mapListItemToRequest)
                 : [];
@@ -135,12 +164,27 @@ export default function UserSupportPage() {
         void loadRequests();
     }, [loadRequests]);
 
+    useEffect(() => {
+        const requestId = Number(searchParams.get('request') ?? 0);
+        if (!Number.isFinite(requestId) || requestId <= 0 || requests.length === 0) return;
+        const matched = requests.find((item) => item.apiId === requestId);
+        if (!matched) return;
+        void moChiTietYeuCau(matched);
+    }, [moChiTietYeuCau, requests, searchParams]);
+
     const handleSubmitRequest = useCallback(
         async (data: { topic: string; content: string; contact: string; files: File[] }) => {
-            const tep_dinh_kem = data.files.map(
-                (file) =>
-                    `https://cdn.dishnet.local/support/${encodeURIComponent(file.name)}`,
-            );
+            let tep_dinh_kem: string[] = [];
+            if (data.files.length > 0) {
+                setUploadingFiles(true);
+                try {
+                    tep_dinh_kem = await Promise.all(
+                        data.files.map((file) => userCommerceApi.uploadTepHoTro(file)),
+                    );
+                } finally {
+                    setUploadingFiles(false);
+                }
+            }
 
             await userCommerceApi.taoHoTro({
                 chu_de: data.topic,
@@ -316,6 +360,11 @@ export default function UserSupportPage() {
                                 Đang tải dữ liệu hỗ trợ...
                             </p>
                         )}
+                        {uploadingFiles && (
+                            <p className="mt-2 text-center text-sm text-text-gray">
+                                Đang tải tệp đính kèm...
+                            </p>
+                        )}
                         {requestsError && (
                             <p className="mt-2 text-center text-sm text-red-500">
                                 {requestsError}
@@ -337,44 +386,7 @@ export default function UserSupportPage() {
                 <RequestListModal
                     requests={requests}
                     onClose={() => setView({ type: 'main' })}
-                    onViewDetail={async (req) => {
-                        try {
-                            const detail: any = await userCommerceApi.layChiTietHoTro(
-                                req.apiId,
-                            );
-                            const parsed = tachNoiDungVaLienHe(detail?.noi_dung_yeu_cau);
-                            const guiLuc = detail?.thoi_gian_gui
-                                ? new Date(detail.thoi_gian_gui)
-                                : null;
-                            const detailRequest: SupportRequest = {
-                                id: detail?.ma_yeu_cau
-                                    ? String(detail.ma_yeu_cau)
-                                    : req.id,
-                                apiId: Number(detail?.id ?? req.apiId),
-                                topic: detail?.chu_de ?? req.topic,
-                                content: parsed.content || req.content,
-                                contact: parsed.contact || req.contact,
-                                date: guiLuc
-                                    ? guiLuc.toLocaleDateString('vi-VN')
-                                    : req.date,
-                                status:
-                                    detail?.trang_thai === 'da_giai_quyet'
-                                        ? 'resolved'
-                                        : 'pending',
-                                response:
-                                    detail?.thong_tin_phan_hoi?.noi_dung_phan_hoi ??
-                                    req.response,
-                                attachments: Array.isArray(detail?.tep_dinh_kem)
-                                    ? detail.tep_dinh_kem
-                                          .map((item: any) => item?.url)
-                                          .filter((item: unknown) => typeof item === 'string')
-                                    : [],
-                            };
-                            setView({ type: 'detail', request: detailRequest });
-                        } catch {
-                            setView({ type: 'detail', request: req });
-                        }
-                    }}
+                    onViewDetail={(req) => void moChiTietYeuCau(req)}
                 />
             )}
 
@@ -692,7 +704,9 @@ function RequestListModal({
 }) {
     const [activeTab, setActiveTab] = useState<'pending' | 'resolved'>('pending');
 
-    const filteredRequests = requests.filter((r) => r.status === activeTab);
+    const filteredRequests = requests.filter((r) =>
+        activeTab === 'pending' ? r.status === 'pending' : r.status === 'resolved',
+    );
 
     return (
         <div

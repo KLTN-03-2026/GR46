@@ -75,7 +75,6 @@ export default function EditProfilePageClient({
     const [showBirthday, setShowBirthday] = useState(false);
     const [showBadge, setShowBadge] = useState(profile.showBadge);
     const [showTrustScore, setShowTrustScore] = useState(profile.showTrustScore);
-    const [isPrivate, setIsPrivate] = useState(profile.isPrivate);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -155,7 +154,6 @@ export default function EditProfilePageClient({
                 anh_dai_dien: avatarUploadUrl ?? undefined,
                 cho_hien_thi_huy_hieu: showBadge,
                 cho_hien_thi_diem_uy_tin: showTrustScore,
-                la_tai_khoan_rieng_tu: isPrivate,
             });
             setIsSaving(false);
             setSaved(true);
@@ -271,16 +269,32 @@ export default function EditProfilePageClient({
 
                         <RowField label="Giới tính">
                             <div className="flex items-center gap-3">
-                                <input
-                                    type="text"
-                                    value={gender}
-                                    onChange={(e) => {
-                                        setGender(e.target.value);
-                                        setFieldErrors((current) => ({ ...current, gender: undefined, general: undefined }));
-                                    }}
-                                    className="h-12 flex-1 rounded-[10px] border border-[#e1e5ea] bg-white px-4 text-[15px] text-[#1d1d1d] outline-none transition focus:border-[#2f8f22]"
-                                    id="input-gender"
-                                />
+                                <div className="flex flex-1 gap-2">
+                                    {([
+                                        { value: 'nu', label: 'Nữ' },
+                                        { value: 'nam', label: 'Nam' },
+                                        { value: 'khac', label: 'Khác' },
+                                    ] as const).map((opt) => {
+                                        const active = normalizeGender(gender) === opt.value;
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => {
+                                                    setGender(opt.value);
+                                                    setFieldErrors((current) => ({ ...current, gender: undefined, general: undefined }));
+                                                }}
+                                                className={`h-12 flex-1 rounded-[10px] border text-[15px] font-semibold transition ${
+                                                    active
+                                                        ? 'border-[#2f8f22] bg-[#eef9ec] text-[#2f8f22]'
+                                                        : 'border-[#e1e5ea] bg-white text-[#4b4f56] hover:bg-[#fafafa]'
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                                 <Toggle checked={showGender} onToggle={() => setShowGender((current) => !current)} id="toggle-gender" />
                             </div>
                             {fieldErrors.gender ? <p className="mt-1 text-[13px] text-[#d33434]">{fieldErrors.gender}</p> : null}
@@ -352,13 +366,6 @@ export default function EditProfilePageClient({
                                     <Toggle checked={showTrustScore} onToggle={() => setShowTrustScore((current) => !current)} id="toggle-trust" />
                                 </div>
                             </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-4 py-2">
-                            <span className="inline-flex rounded-[4px] bg-[#ffab1f] px-2 py-1 text-[14px] font-bold text-black">
-                                Chế độ tài khoản riêng tư
-                            </span>
-                            <Toggle checked={isPrivate} onToggle={() => setIsPrivate((current) => !current)} id="toggle-private" />
                         </div>
 
                         <div className="mt-6 flex items-center justify-end gap-3">

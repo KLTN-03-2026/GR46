@@ -53,6 +53,20 @@ type ReviewerContentPaging = {
   soLuong: number;
 };
 
+function extractMediaUrls(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'url' in item) {
+        const value = (item as { url?: unknown }).url;
+        return typeof value === 'string' ? value : '';
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
 export async function getReviewerContentPage(
   idNguoiDung: number,
   tab: ReviewerContentTab,
@@ -77,7 +91,7 @@ export async function getReviewerContentPage(
     const items: ReviewerVideo[] = rows.map((item) => ({
       id: String(item.id),
       image:
-        (Array.isArray(item.tep_dinh_kem) ? String(item.tep_dinh_kem[0] ?? '') : '') ||
+        (extractMediaUrls(item.tep_dinh_kem)[0] ?? '') ||
         'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=800&q=80',
       views: String(item.tong_luot_thich ?? 0),
     }));
@@ -86,9 +100,9 @@ export async function getReviewerContentPage(
 
   const items: ReviewerProfilePost[] = rows.map((item) => ({
     id: String(item.id),
-    date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+    date: item.ngay_dang ? new Date(String(item.ngay_dang)).toLocaleDateString('vi-VN') : '',
     content: String(item.noi_dung ?? ''),
-    images: Array.isArray(item.tep_dinh_kem) ? item.tep_dinh_kem.map((value) => String(value)) : [],
+    images: extractMediaUrls(item.tep_dinh_kem),
     likes: String(item.tong_luot_thich ?? 0),
     comments: String(item.tong_luot_binh_luan ?? 0),
     shares: String(item.tong_luot_chia_se ?? 0),
