@@ -277,7 +277,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
             ? videoPayload.du_lieu.map((item: any) => ({
                 id: String(item.id),
                 image: (extractMediaUrls(item.tep_dinh_kem)[0] ?? null) || DEFAULT_AVATAR,
-                views: String(item.tong_luot_thich ?? 0),
+                views: String(item.tong_luot_xem ?? 0),
             }))
             : [];
 
@@ -438,7 +438,7 @@ export async function getUserProfileById(id: number): Promise<UserProfile | null
             ? videoPayload.du_lieu.map((item: any) => ({
                 id: String(item.id),
                 image: (extractMediaUrls(item.tep_dinh_kem)[0] ?? null) || DEFAULT_AVATAR,
-                views: String(item.tong_luot_thich ?? 0),
+                views: String(item.tong_luot_xem ?? 0),
             }))
             : [];
 
@@ -473,10 +473,86 @@ export async function getUserProfileById(id: number): Promise<UserProfile | null
     }
 }
 
+export async function getStoreProfileById(storeId: number): Promise<UserProfile | null> {
+    try {
+        // Lấy thông tin cơ bản của cửa hàng (public)
+        const storeData = await requestWithAuthCookie<any>(`/user/cua-hang/${storeId}`);
+        if (!storeData) return null;
+
+        const ownerId = storeData.id_chu_so_huu != null ? Number(storeData.id_chu_so_huu) : null;
+        if (!ownerId) return null;
+
+        // Lấy bài viết của chủ cửa hàng
+        const [postPayload, videoPayload, repostPayload] = await Promise.all([
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${ownerId}/noi-dung?tab=bai_viet&trang=1&so_luong=20`).catch(() => null),
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${ownerId}/noi-dung?tab=video&trang=1&so_luong=20`).catch(() => null),
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${ownerId}/noi-dung?tab=bai_dang_lai&trang=1&so_luong=20`).catch(() => null),
+        ]);
+
+        const apiPosts = Array.isArray(postPayload?.du_lieu)
+            ? postPayload.du_lieu.map((item: any) => ({
+                id: String(item.id), date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+                content: String(item.noi_dung ?? ''), images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0), visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
+                likes: String(item.tong_luot_thich ?? 0), comments: String(item.tong_luot_binh_luan ?? 0),
+                shares: String(item.tong_luot_chia_se ?? 0), sends: '0',
+                type: item.loai_bai_viet ?? 'bai_viet', monetized: Boolean(item.bat_kiem_tien),
+                dishLink: item.link_mon_an ?? null, dishImage: typeof item.hinh_anh_mon_an === 'string' ? item.hinh_anh_mon_an : null,
+                storeAvatar: typeof item.anh_dai_dien_cua_hang_lien_ket === 'string' ? item.anh_dai_dien_cua_hang_lien_ket : null,
+            })) : [];
+        const apiReposts = Array.isArray(repostPayload?.du_lieu)
+            ? repostPayload.du_lieu.map((item: any) => ({
+                id: String(item.id), date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+                content: String(item.noi_dung ?? ''), images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0), visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
+                likes: String(item.tong_luot_thich ?? 0), comments: String(item.tong_luot_binh_luan ?? 0),
+                shares: String(item.tong_luot_chia_se ?? 0), sends: '0', type: 'repost',
+            })) : [];
+        const apiVideos = Array.isArray(videoPayload?.du_lieu)
+            ? videoPayload.du_lieu.map((item: any) => ({
+                id: String(item.id), image: (extractMediaUrls(item.tep_dinh_kem)[0] ?? null) || DEFAULT_AVATAR,
+                views: String(item.tong_luot_xem ?? 0),
+            })) : [];
+
+        return {
+            id: String(ownerId),
+            name: String(storeData.ten_cua_hang ?? 'Cửa hàng'),
+            handle: String(storeData.slug ?? storeData.ten_cua_hang ?? ''),
+            avatar: storeData.anh_dai_dien ?? DEFAULT_AVATAR,
+            gender: '', birthday: '', bio: String(storeData.mo_ta ?? ''),
+            email: '', phone: '', address: '',
+            trustScore: '0', postsCount: String(apiPosts.length),
+            followers: '0', following: '0',
+            isTopReviewer: false, showBadge: false, showTrustScore: false, isPrivate: false,
+            isMonetized: true,
+            posts: apiPosts, reposts: apiReposts, videos: apiVideos,
+            earnings: EMPTY_EARNINGS,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export async function getCurrentStoreProfile(): Promise<UserProfile> {
     const profile = await getCurrentUserProfile();
+
+    let storeName: string | null = null;
+    let storeAvatar: string | null = null;
+    let storeId: string | null = null;
+    try {
+        const overview = await requestWithAuthCookie<any>('/store/tong-quan');
+        const info = overview?.thong_tin_cua_hang ?? overview;
+        storeName = info?.ten_cua_hang ?? null;
+        storeAvatar = info?.anh_dai_dien ?? null;
+        storeId = info?.id != null ? String(info.id) : null;
+    } catch { /* ignore */ }
+
     return {
         ...profile,
+        id: storeId ?? profile.id,
+        name: storeName ?? profile.name,
+        avatar: storeAvatar ?? profile.avatar,
         isTopReviewer: false,
+        isMonetized: true,
     };
 }

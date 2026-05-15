@@ -147,7 +147,7 @@ export class AdminReviewService {
               .where("bv.id_nguoi_dang = :idNguoiDung", {
                 idNguoiDung: yc.nguoi_gui.id,
               })
-              .andWhere("bv.trang_thai_hien_thi = :trangThai", {
+              .andWhere("bv.trang_thai_duyet = :trangThai", {
                 trangThai: "hien_thi",
               })
               .getCount()

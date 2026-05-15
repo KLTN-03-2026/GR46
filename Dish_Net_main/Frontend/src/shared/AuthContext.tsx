@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         la_chu_cua_hang: Boolean(data.la_chu_cua_hang),
         la_admin: Boolean(data.la_admin),
         trang_thai_kiem_tien_noi_dung: data.trang_thai_kiem_tien_noi_dung ?? undefined,
+        id_cua_hang: data.id_cua_hang ?? undefined,
       });
     } catch {
       setNguoiDung(null);

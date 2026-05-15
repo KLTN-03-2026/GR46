@@ -304,12 +304,6 @@ function PromoModal({
                         disabled={type !== 'phan_tram'} placeholder="VD: 20"
                         className="w-[80px] rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none disabled:bg-[#f8f8f8]" />
                       <span className="text-[13px] text-[#555]">%</span>
-                      <span className="ml-3 text-[13px] text-[#888]">Tối đa</span>
-                      <input
-                        type="number" value={maxDiscount} onChange={(e) => setMaxDiscount(e.target.value)}
-                        disabled={type !== 'phan_tram'} placeholder="VD: 30000"
-                        className="w-[100px] rounded-[8px] border border-[#ddd] px-3 py-1.5 text-[14px] text-black outline-none disabled:bg-[#f8f8f8]" />
-                      <span className="text-[13px] text-[#555]">đ</span>
                     </div>
                   )}
                   {t.key === 'so_tien' && (

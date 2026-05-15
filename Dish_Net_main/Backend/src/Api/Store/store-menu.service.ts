@@ -345,18 +345,16 @@ export class StoreMenuService {
       );
     }
 
-    const maxMa = await this.monAnRepo
-      .createQueryBuilder('ma')
-      .select('MAX(ma.ma_mon)', 'max')
-      .where('ma.id_cua_hang = :idCuaHang', { idCuaHang: cuaHang.id })
-      .getRawOne();
-
-    let nextNum = 1;
-    if (maxMa?.max) {
-      const match = maxMa.max.match(/(\d+)$/);
-      if (match) nextNum = parseInt(match[1], 10) + 1;
+    const soMonHienTai = await this.monAnRepo.count({
+      where: { id_cua_hang: cuaHang.id },
+    });
+    let nextNum = soMonHienTai + 1;
+    const prefix = cuaHang.id.toString().padStart(3, '0');
+    let maMon = `${prefix}M${nextNum.toString().padStart(4, '0')}`;
+    while (await this.monAnRepo.count({ where: { ma_mon: maMon } }) > 0) {
+      nextNum++;
+      maMon = `${prefix}M${nextNum.toString().padStart(4, '0')}`;
     }
-    const maMon = `${cuaHang.id.toString().padStart(3, '0')}M${nextNum.toString().padStart(4, '0')}`;
 
     const entity = this.monAnRepo.create({
       id_cua_hang: cuaHang.id,
@@ -393,6 +391,7 @@ export class StoreMenuService {
     return {
       message: 'Tạo món ăn thành công',
       id: Number(saved.id),
+      ma_mon: saved.ma_mon,
     };
   }
 

@@ -149,7 +149,7 @@ export const storeMenuApi = {
     trang_thai_ban?: ItemStatus;
     toppings?: { ten_topping: string; gia: number }[];
   }) {
-    return request<{ message: string; id: number }>(BASE, {
+    return request<{ message: string; id: number; ma_mon: string }>(BASE, {
       method: 'POST',
       body: JSON.stringify({
         ...data,

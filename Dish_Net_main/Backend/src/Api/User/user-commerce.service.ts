@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { DonHangEntity } from '../Admin/entities/don-hang.entity';
 import { DonHangChiTietEntity } from '../Admin/entities/don-hang-chi-tiet.entity';
 import { LichSuDonHangEntity } from '../Admin/entities/lich-su-don-hang.entity';
@@ -94,6 +94,8 @@ type PhienThanhToanSnapshot = {
       hinh_anh: string | null;
       so_luong: number;
       don_gia: number;
+      toppings: { id: number; ten_topping: string; gia: number }[];
+      gia_topping: number;
       thanh_tien: number;
       ghi_chu: string | null;
     }>;
@@ -750,6 +752,31 @@ export class UserCommerceService {
     };
   }
 
+  async kiemTraDiaChiKinhDoanh(diaChiKinhDoanh: string) {
+    const trimmed = diaChiKinhDoanh.trim();
+    if (!trimmed) return { kha_dung: false, thong_bao: 'Địa chỉ kinh doanh không được để trống.' };
+
+    const cuaHangTrung = await this.cuaHangRepo.findOne({
+      where: { dia_chi_kinh_doanh: ILike(trimmed) },
+    });
+    if (cuaHangTrung) {
+      return { kha_dung: false, thong_bao: 'Địa chỉ kinh doanh này đã được đăng ký bởi một cửa hàng khác.' };
+    }
+
+    const donChoXetDuyet = await this.yeuCauNangCapRepo.count({
+      where: {
+        dia_chi_kinh_doanh: ILike(trimmed),
+        loai_yeu_cau: 'mo_cua_hang',
+        trang_thai: 'cho_duyet',
+      },
+    });
+    if (donChoXetDuyet > 0) {
+      return { kha_dung: false, thong_bao: 'Địa chỉ kinh doanh này đang có đơn đăng ký chờ xét duyệt.' };
+    }
+
+    return { kha_dung: true, thong_bao: null };
+  }
+
   async taoYeuCauMoCuaHang(userId: number, dto: DangKyMoCuaHangDto) {
     if (!dto.dong_y_dieu_khoan) {
       throw new BadRequestException('Bạn phải đồng ý điều khoản trước khi gửi yêu cầu mở cửa hàng');
@@ -772,6 +799,26 @@ export class UserCommerceService {
     });
     if (existingPending > 0) {
       throw new BadRequestException('Bạn đã có yêu cầu mở cửa hàng đang chờ duyệt');
+    }
+
+    const diaChiKinhDoanh = dto.dia_chi_kinh_doanh.trim();
+
+    const cuaHangTrung = await this.cuaHangRepo.findOne({
+      where: { dia_chi_kinh_doanh: ILike(diaChiKinhDoanh) },
+    });
+    if (cuaHangTrung) {
+      throw new BadRequestException('Địa chỉ kinh doanh này đã được đăng ký bởi một cửa hàng khác. Vui lòng sử dụng địa chỉ khác.');
+    }
+
+    const donChoXetDuyet = await this.yeuCauNangCapRepo.count({
+      where: {
+        dia_chi_kinh_doanh: ILike(diaChiKinhDoanh),
+        loai_yeu_cau: 'mo_cua_hang',
+        trang_thai: 'cho_duyet',
+      },
+    });
+    if (donChoXetDuyet > 0) {
+      throw new BadRequestException('Địa chỉ kinh doanh này đang có đơn đăng ký chờ xét duyệt. Vui lòng sử dụng địa chỉ khác.');
     }
 
     this.kiemTraDanhSachTep(dto.anh_cccd, {
@@ -854,6 +901,7 @@ export class UserCommerceService {
         'gh.ghi_chu AS ghi_chu',
         'gh.duoc_chon AS duoc_chon',
         'gh.gia_tai_thoi_diem_them AS gia_tai_thoi_diem_them',
+        'gh.topping_da_chon AS topping_da_chon',
         'gh.ngay_tao AS ngay_tao',
         'gh.ngay_cap_nhat AS ngay_cap_nhat',
         'ma.ten_mon AS ten_mon',
@@ -873,6 +921,7 @@ export class UserCommerceService {
         ghi_chu: string | null;
         duoc_chon: string;
         gia_tai_thoi_diem_them: string;
+        topping_da_chon: string | null;
         ngay_tao: Date;
         ngay_cap_nhat: Date;
         ten_mon: string | null;
@@ -898,6 +947,8 @@ export class UserCommerceService {
           hinh_anh: string | null;
           so_luong: number;
           gia: number;
+          toppings: { id: number; ten_topping: string; gia: number }[];
+          gia_topping: number;
           thanh_tien: number;
           duoc_chon: boolean;
           ghi_chu: string | null;
@@ -918,7 +969,16 @@ export class UserCommerceService {
       };
       const gia = Number(row.gia_hien_tai ?? row.gia_tai_thoi_diem_them ?? 0);
       const soLuong = Number(row.so_luong);
-      const thanhTien = gia * soLuong;
+      const toppings: { id: number; ten_topping: string; gia: number }[] = row.topping_da_chon
+        ? (() => {
+            try {
+              const v = row.topping_da_chon;
+              return Array.isArray(v) ? v : JSON.parse(v as string);
+            } catch { return []; }
+          })()
+        : [];
+      const giaTopping = toppings.reduce((sum, t) => sum + Number(t.gia ?? 0), 0);
+      const thanhTien = (gia + giaTopping) * soLuong;
       const selected = Number(row.duoc_chon) === 1;
       if (selected) {
         tongMonDaChon += soLuong;
@@ -932,6 +992,8 @@ export class UserCommerceService {
         hinh_anh: row.hinh_anh,
         so_luong: soLuong,
         gia,
+        toppings,
+        gia_topping: giaTopping,
         thanh_tien: thanhTien,
         duoc_chon: selected,
         ghi_chu: row.ghi_chu,
@@ -968,6 +1030,10 @@ export class UserCommerceService {
       );
     }
 
+    const incomingToppings = dto.toppings && dto.toppings.length > 0
+      ? dto.toppings.map((t) => ({ id: t.id, ten_topping: t.ten_topping, gia: t.gia }))
+      : [];
+
     const existing = await this.gioHangRepo.findOne({
       where: {
         id_nguoi_dung: userId,
@@ -983,12 +1049,12 @@ export class UserCommerceService {
           `Mỗi món chỉ được tối đa ${UserCommerceService.MAX_QUANTITY_PER_ITEM} phần`,
         );
       }
-      existing.so_luong = soLuongMoi;
-      if (dto.ghi_chu != null) {
-        existing.ghi_chu = dto.ghi_chu.trim() || null;
-      }
-      existing.gia_tai_thoi_diem_them = Number(mon.gia_ban);
-      await this.gioHangRepo.save(existing);
+      const ghiChuMoi = dto.ghi_chu != null ? (dto.ghi_chu.trim() || null) : existing.ghi_chu;
+      const toppingJson = incomingToppings.length > 0 ? JSON.stringify(incomingToppings) : null;
+      await this.gioHangRepo.query(
+        `UPDATE gio_hang_chi_tiet SET so_luong = ?, ghi_chu = ?, topping_da_chon = ?, gia_tai_thoi_diem_them = ?, ngay_cap_nhat = NOW() WHERE id = ?`,
+        [soLuongMoi, ghiChuMoi, toppingJson, Number(mon.gia_ban), existing.id],
+      );
     } else {
       const distinctCount = await this.gioHangRepo.count({
         where: { id_nguoi_dung: userId },
@@ -998,17 +1064,11 @@ export class UserCommerceService {
           `Giỏ hàng chỉ chứa tối đa ${UserCommerceService.MAX_DISTINCT_CART_ITEMS} món khác nhau`,
         );
       }
-      await this.gioHangRepo.save({
-        id_nguoi_dung: userId,
-        id_cua_hang: Number(mon.id_cua_hang),
-        id_mon_an: Number(mon.id),
-        so_luong: soLuongThem,
-        ghi_chu: dto.ghi_chu?.trim() || null,
-        duoc_chon: true,
-        gia_tai_thoi_diem_them: Number(mon.gia_ban),
-        ngay_tao: new Date(),
-        ngay_cap_nhat: new Date(),
-      });
+      const toppingJson = incomingToppings.length > 0 ? JSON.stringify(incomingToppings) : null;
+      await this.gioHangRepo.query(
+        `INSERT INTO gio_hang_chi_tiet (id_nguoi_dung, id_cua_hang, id_mon_an, so_luong, ghi_chu, topping_da_chon, duoc_chon, gia_tai_thoi_diem_them, ngay_tao, ngay_cap_nhat) VALUES (?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())`,
+        [userId, Number(mon.id_cua_hang), Number(mon.id), soLuongThem, dto.ghi_chu?.trim() || null, toppingJson, Number(mon.gia_ban)],
+      );
     }
 
     return this.layGioHang(userId);
@@ -1214,6 +1274,8 @@ export class UserCommerceService {
           hinh_anh: string | null;
           so_luong: number;
           don_gia: number;
+          toppings: { id: number; ten_topping: string; gia: number }[];
+          gia_topping: number;
           thanh_tien: number;
           ghi_chu: string | null;
         }>;
@@ -1238,6 +1300,15 @@ export class UserCommerceService {
       };
       const donGia = Number(row.gia_hien_tai ?? row.gia_tai_thoi_diem_them ?? 0);
       const soLuong = Number(row.so_luong);
+      const toppings: { id: number; ten_topping: string; gia: number }[] = row.topping_da_chon
+        ? (() => {
+            try {
+              const v = row.topping_da_chon;
+              return Array.isArray(v) ? v : JSON.parse(v as string);
+            } catch { return []; }
+          })()
+        : [];
+      const giaTopping = toppings.reduce((sum, t) => sum + Number(t.gia ?? 0), 0);
       current.items.push({
         id_gio_hang: Number(row.id),
         id_mon_an: Number(row.id_mon_an),
@@ -1245,7 +1316,9 @@ export class UserCommerceService {
         hinh_anh: row.hinh_anh,
         so_luong: soLuong,
         don_gia: donGia,
-        thanh_tien: donGia * soLuong,
+        toppings,
+        gia_topping: giaTopping,
+        thanh_tien: (donGia + giaTopping) * soLuong,
         ghi_chu: row.ghi_chu,
       });
       grouped.set(storeId, current);
@@ -1373,6 +1446,8 @@ export class UserCommerceService {
           hinh_anh: item.hinh_anh,
           so_luong: item.so_luong,
           don_gia: item.don_gia,
+          toppings: item.toppings,
+          gia_topping: item.gia_topping,
           thanh_tien: item.thanh_tien,
           ghi_chu: item.ghi_chu,
         })),

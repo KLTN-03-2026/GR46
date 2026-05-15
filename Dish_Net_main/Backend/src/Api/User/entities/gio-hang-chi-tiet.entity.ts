@@ -20,14 +20,8 @@ export class GioHangChiTietEntity {
   @Column({ type: 'text', nullable: true })
   ghi_chu: string | null;
 
-  @Column({
-    type: 'text',
-    nullable: true,
-    insert: false,
-    update: false,
-    select: false,
-  })
-  topping_da_chon: string | null;
+  @Column({ type: 'json', nullable: true })
+  topping_da_chon: { id: number; ten_topping: string; gia: number }[] | null;
 
   @Column({ type: 'tinyint', width: 1, default: 1 })
   duoc_chon: boolean;

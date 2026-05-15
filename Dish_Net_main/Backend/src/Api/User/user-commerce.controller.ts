@@ -160,6 +160,11 @@ export class UserCommerceController {
     return this.userCommerceService.taoYeuCauRutTien(req.user!.sub, dto);
   }
 
+  @Get('che-do-chuyen-nghiep/kiem-tra-dia-chi-kinh-doanh')
+  async kiemTraDiaChiKinhDoanh(@Query('dia_chi') diaChiKinhDoanh: string) {
+    return this.userCommerceService.kiemTraDiaChiKinhDoanh(diaChiKinhDoanh ?? '');
+  }
+
   @Post('che-do-chuyen-nghiep/mo-cua-hang')
   async taoYeuCauMoCuaHang(
     @Req() req: AuthenticatedRequest,

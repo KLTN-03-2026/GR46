@@ -225,6 +225,10 @@ export class ThemVaoGioHangDto {
   @IsString()
   @MaxLength(2000)
   ghi_chu?: string;
+
+  @IsOptional()
+  @IsArray()
+  toppings?: { id: number; ten_topping: string; gia: number }[];
 }
 
 export class DatDonHangDto {

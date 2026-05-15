@@ -529,10 +529,11 @@ function CreatePostModal({
     };
 }) {
     const { nguoiDung } = useAuth();
-    // Chỉ "Nhà sáng tạo" (đã đăng ký kiếm tiền nội dung & được duyệt) mới được gắn link đặt món
+    // Nhà sáng tạo (đã duyệt) và chủ cửa hàng đều được gắn link đặt món
     const canAttachLink = Boolean(
         nguoiDung?.la_nha_sang_tao ||
-        nguoiDung?.trang_thai_kiem_tien_noi_dung === 'da_duyet',
+        nguoiDung?.trang_thai_kiem_tien_noi_dung === 'da_duyet' ||
+        nguoiDung?.la_chu_cua_hang,
     );
     const [isOrderLink, setIsOrderLink] = useState(Boolean(initialData?.monetize));
     const [content, setContent] = useState(initialData?.content ?? '');
@@ -772,6 +773,78 @@ function PostMenu({
     );
 }
 
+const REPORT_REASONS: Array<{ value: string; label: string }> = [
+    { value: 'duoi_18_tuoi', label: 'Vấn đề liên quan đến người dưới 18 tuổi' },
+    { value: 'bat_nat_quay_roi', label: 'Bắt nạt, quấy rối hoặc lăng mạ/lạm dụng/ngược đãi' },
+    { value: 'tu_tu_tu_hai', label: 'Tự tử hoặc tự hại bản thân' },
+    { value: 'bao_luc_thu_ghet', label: 'Nội dung mang tính bạo lực, thù ghét hoặc gây phiền toái' },
+    { value: 'hang_hoa_han_che', label: 'Bán hoặc quảng bá mặt hàng bị hạn chế' },
+    { value: 'noi_dung_nguoi_lon', label: 'Nội dung người lớn' },
+    { value: 'thong_tin_sai_su_that', label: 'Thông tin sai sự thật, lừa đảo hoặc gian lận' },
+    { value: 'so_huu_tri_tue', label: 'Quyền sở hữu trí tuệ' },
+    { value: 'khong_muon_xem', label: 'Tôi không muốn xem nội dung này' },
+];
+
+function ReportPostModal({ isOpen, isSubmitting, onClose, onPickReason }: {
+    isOpen: boolean; isSubmitting: boolean; onClose: () => void;
+    onPickReason: (reason: { value: string; label: string }) => void;
+}) {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4 py-6" onClick={onClose}>
+            <div className="w-full max-w-[760px] overflow-hidden rounded-[18px] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.24)]" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between border-b border-[#e5e7eb] px-5 py-4">
+                    <h3 className="text-[42px] font-bold text-black">Báo cáo</h3>
+                    <button type="button" onClick={onClose} className="flex h-12 w-12 items-center justify-center rounded-full bg-[#eef1f5] text-[34px] leading-none text-[#59606b]" aria-label="Đóng">×</button>
+                </div>
+                <div className="border-b border-[#eceff1] px-6 py-5">
+                    <p className="text-[18px] font-semibold text-[#111827]">Tại sao bạn báo cáo bài viết này?</p>
+                    <p className="mt-2 text-[15px] leading-7 text-[#6b7280]">Nếu bạn nhận thấy ai đó đang gặp nguy hiểm, đừng chần chừ mà hãy tìm ngay sự giúp đỡ trước khi báo cáo với DishNet.</p>
+                </div>
+                <div className="max-h-[56vh] overflow-y-auto px-2 py-2">
+                    {REPORT_REASONS.map((reason) => (
+                        <button key={reason.value} type="button" onClick={() => onPickReason(reason)} disabled={isSubmitting}
+                            className="w-full border-b border-[#f1f3f5] px-5 py-4 text-left transition hover:bg-[#f8fafc] disabled:cursor-not-allowed">
+                            <p className="text-[17px] font-semibold text-[#111827]">{reason.label}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ReportDoneModal({ isOpen, authorName, onClose }: { isOpen: boolean; authorName: string; onClose: () => void }) {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[96] flex items-center justify-center bg-black/50 px-4 py-6" onClick={onClose}>
+            <div className="w-full max-w-[660px] overflow-hidden rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.22)]" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-6 text-center">
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#e8f5e9] text-[#2f8f22]">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="m5 12 4 4 10-10" /></svg>
+                    </div>
+                    <p className="text-[34px] font-bold leading-tight text-[#111827]">Cảm ơn bạn đã cho chúng tôi biết.</p>
+                    <p className="mx-auto mt-2 max-w-[560px] text-[15px] leading-7 text-[#6b7280]">Chúng tôi sử dụng ý kiến đóng góp của bạn để giúp hệ thống biết được khi có nội dung vi phạm.</p>
+                </div>
+                <div className="border-t border-[#eceff1] px-6 py-5">
+                    <p className="mb-4 text-[20px] font-bold text-[#111827]">Các bước khác bạn có thể thực hiện</p>
+                    <div className="space-y-3">
+                        <div className="flex items-start gap-3 px-1 py-1">
+                            <svg className="mt-1 shrink-0" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.8-3.1 4.6-4.6 8-4.6s6.2 1.5 8 4.6"/></svg>
+                            <p className="text-[18px] font-semibold text-[#111827]">Chặn {authorName}</p>
+                        </div>
+                        <div className="flex items-start gap-3 px-1 py-1">
+                            <svg className="mt-1 shrink-0" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                            <div><p className="text-[18px] font-semibold text-[#111827]">Báo cáo với quản trị viên</p><p className="text-[14px] text-[#6b7280]">Thông báo cho quản trị viên về bài viết này.</p></div>
+                        </div>
+                    </div>
+                    <button type="button" onClick={onClose} className="mt-5 w-full rounded-[12px] bg-[#111827] py-3 text-[16px] font-semibold text-white transition hover:opacity-90">Đóng</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function PostCard({
     post,
     profile,
@@ -807,7 +880,7 @@ function PostCard({
             <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-4 sm:grid-cols-[44px_minmax(0,1fr)]">
                 <div className="flex flex-col items-center">
                     <img src={profile.avatar} alt={profile.name} className="h-10 w-10 rounded-full object-cover" />
-                    <div className="mt-3 h-full min-h-[320px] w-px bg-[#ececec]" />
+                    <div className="mt-3 h-full w-px bg-[#ececec]" />
                 </div>
 
                 <div className="min-w-0">
@@ -881,20 +954,29 @@ function PostCard({
                         </div>
                     ) : null}
 
-                    <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 text-[13px] text-[#5b5b5b]">
-                        <button type="button" onClick={onLike} className="transition hover:text-[#285e19]">♡ {post.likes}</button>
-                        <button type="button" onClick={onComment} className="transition hover:text-[#285e19]">◔ {post.comments}</button>
+                    <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#5b5b5b]">
+                        <button type="button" onClick={onLike} className="flex items-center gap-1.5 transition hover:text-[#e53935]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            {post.likes}
+                        </button>
+                        <button type="button" onClick={onComment} className="flex items-center gap-1.5 transition hover:text-[#285e19]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            {post.comments}
+                        </button>
                         <button
                             type="button"
                             onClick={onShare}
                             disabled={shareDisabled}
-                            title={!canShare && !isRepost ? 'Không thể đăng lại bài viết của chính mình' : undefined}
-                            className={`transition ${shareDisabled ? 'cursor-not-allowed text-[#b5b5b5]' : 'hover:text-[#285e19]'}`}
+                            title={isRepost ? 'Không thể chia sẻ lại một bài đăng lại' : !canShare ? 'Không thể chia sẻ bài viết của chính mình' : undefined}
+                            className={`flex items-center gap-1.5 transition ${shareDisabled ? 'cursor-not-allowed text-[#b5b5b5]' : 'hover:text-[#285e19]'}`}
                         >
-                            ↺ {post.shares}
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            {post.shares}
                         </button>
-                        <button type="button" onClick={onReport} className="transition hover:text-[#c62828]">⚑ Báo cáo</button>
-                        <span>➤ {post.sends}</span>
+                        <button type="button" onClick={onReport} className="flex items-center gap-1.5 transition hover:text-[#c62828]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                            Báo cáo
+                        </button>
                         {post.dishLink ? (
                             <button
                                 type="button"
@@ -911,11 +993,17 @@ function PostCard({
     );
 }
 
-function VideoCard({ item }: { item: UserProfile['videos'][number] }) {
+function VideoCard({ item, onClick }: { item: UserProfile['videos'][number]; onClick?: () => void }) {
     const url = String(item.image ?? '');
     const isVideoFile = /\.(mp4|mov|avi|mkv|webm)(\?|#|$)/i.test(url);
     return (
-        <article className="group relative overflow-hidden rounded-[12px]">
+        <article
+            className="group relative cursor-pointer overflow-hidden rounded-[12px]"
+            onClick={onClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick?.(); }}
+        >
             {isVideoFile ? (
                 <video
                     src={url}
@@ -935,7 +1023,54 @@ function VideoCard({ item }: { item: UserProfile['videos'][number] }) {
                 <span>▷</span>
                 <span>{item.views}</span>
             </div>
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white text-2xl">▶</div>
+            </div>
         </article>
+    );
+}
+
+function VideoLightbox({ url, postId, onClose, onViewCounted }: { url: string; postId: string; onClose: () => void; onViewCounted?: () => void }) {
+    const isVideoFile = /\.(mp4|mov|avi|mkv|webm)(\?|#|$)/i.test(url);
+
+    useEffect(() => {
+        const id = Number(postId);
+        if (!Number.isFinite(id) || id <= 0) return;
+        void userContentApi.layChiTietBaiViet(id).then(() => {
+            onViewCounted?.();
+        }).catch(() => { /* bỏ qua lỗi xác thực */ });
+    }, [postId, onViewCounted]);
+
+    return (
+        <div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-4"
+            onClick={onClose}
+        >
+            <div
+                className="relative w-full max-w-3xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="absolute -top-10 right-0 text-white text-3xl leading-none hover:opacity-70"
+                    aria-label="Đóng"
+                >
+                    ×
+                </button>
+                {isVideoFile ? (
+                    <video
+                        src={url}
+                        controls
+                        autoPlay
+                        playsInline
+                        className="max-h-[80vh] w-full rounded-[12px] bg-black"
+                    />
+                ) : (
+                    <img src={url} alt="" className="max-h-[80vh] w-full rounded-[12px] object-contain" />
+                )}
+            </div>
+        </div>
     );
 }
 
@@ -1582,6 +1717,12 @@ export default function ProfilePageClient({
     const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
     const [isSharePopupOpen, setIsSharePopupOpen] = useState(false);
     const [copyDone, setCopyDone] = useState(false);
+    const [activeVideo, setActiveVideo] = useState<{ id: string; url: string } | null>(null);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isReportDoneModalOpen, setIsReportDoneModalOpen] = useState(false);
+    const [reportTargetId, setReportTargetId] = useState<number | null>(null);
+    const [reportTargetAuthor, setReportTargetAuthor] = useState('người dùng này');
+    const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
     useEffect(() => {
         if (!isSharePopupOpen) return;
@@ -2078,25 +2219,9 @@ export default function ProfilePageClient({
                                     onReport={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
-                                        const reason = window.prompt(
-                                            'Nhập lý do báo cáo bài viết',
-                                        );
-                                        if (!reason?.trim()) return;
-                                        void userContentApi
-                                            .baoCaoBaiViet(id, {
-                                                loai_vi_pham: 'noi_dung_vi_pham',
-                                                noi_dung_bao_cao: reason.trim(),
-                                            })
-                                            .then(() =>
-                                                setActionMessage('Đã gửi báo cáo bài viết'),
-                                            )
-                                            .catch((e) =>
-                                                setActionMessage(
-                                                    e instanceof Error
-                                                        ? e.message
-                                                        : 'Không thể báo cáo bài viết',
-                                                ),
-                                            );
+                                        setReportTargetId(id);
+                                        setReportTargetAuthor(profile.name);
+                                        setIsReportModalOpen(true);
                                     }}
                                     onOpenDishLink={() => {
                                         const id = Number(post.id);
@@ -2150,7 +2275,7 @@ export default function ProfilePageClient({
                         {visibleVideos.length > 0 ? (
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {visibleVideos.map((video) => (
-                                    <VideoCard key={video.id} item={video} />
+                                    <VideoCard key={video.id} item={video} onClick={() => setActiveVideo({ id: video.id, url: String(video.image ?? '') })} />
                                 ))}
                             </div>
                         ) : (
@@ -2247,25 +2372,9 @@ export default function ProfilePageClient({
                                     onReport={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
-                                        const reason = window.prompt(
-                                            'Nhập lý do báo cáo bài viết',
-                                        );
-                                        if (!reason?.trim()) return;
-                                        void userContentApi
-                                            .baoCaoBaiViet(id, {
-                                                loai_vi_pham: 'noi_dung_vi_pham',
-                                                noi_dung_bao_cao: reason.trim(),
-                                            })
-                                            .then(() =>
-                                                setActionMessage('Đã gửi báo cáo bài viết'),
-                                            )
-                                            .catch((e) =>
-                                                setActionMessage(
-                                                    e instanceof Error
-                                                        ? e.message
-                                                        : 'Không thể báo cáo bài viết',
-                                                ),
-                                            );
+                                        setReportTargetId(id);
+                                        setReportTargetAuthor(profile.name);
+                                        setIsReportModalOpen(true);
                                     }}
                                     onOpenDishLink={() => {
                                         const id = Number(post.id);
@@ -2369,6 +2478,7 @@ export default function ProfilePageClient({
                         setActiveCommentPostId(null);
                     }}
                     storeName={profile.name}
+                    coverImage={profile.avatar ?? null}
                     postId={activeCommentPostId}
                     onCommentPosted={(postId) => {
                         patchPostMetric(postId, 'comments', undefined, 1);
@@ -2427,6 +2537,50 @@ export default function ProfilePageClient({
 
             {isFollowingModalOpen ? (
                 <FollowingModal onClose={() => setIsFollowingModalOpen(false)} />
+            ) : null}
+
+            <ReportPostModal
+                isOpen={isReportModalOpen}
+                isSubmitting={isSubmittingReport}
+                onClose={() => { setIsReportModalOpen(false); setReportTargetId(null); }}
+                onPickReason={(reason) => {
+                    if (reportTargetId == null || isSubmittingReport) return;
+                    setIsSubmittingReport(true);
+                    void userContentApi
+                        .baoCaoBaiViet(reportTargetId, {
+                            loai_vi_pham: reason.value,
+                            noi_dung_bao_cao: reason.label,
+                        })
+                        .then(() => {
+                            setIsReportModalOpen(false);
+                            setIsReportDoneModalOpen(true);
+                        })
+                        .catch((e) => setActionMessage(e instanceof Error ? e.message : 'Không thể báo cáo bài viết'))
+                        .finally(() => setIsSubmittingReport(false));
+                }}
+            />
+
+            <ReportDoneModal
+                isOpen={isReportDoneModalOpen}
+                authorName={reportTargetAuthor}
+                onClose={() => { setIsReportDoneModalOpen(false); setReportTargetId(null); }}
+            />
+
+            {activeVideo ? (
+                <VideoLightbox
+                    url={activeVideo.url}
+                    postId={activeVideo.id}
+                    onClose={() => setActiveVideo(null)}
+                    onViewCounted={() => {
+                        setVideos((prev) =>
+                            prev.map((v) =>
+                                v.id === activeVideo.id
+                                    ? { ...v, views: String(Number(v.views) + 1) }
+                                    : v,
+                            ),
+                        );
+                    }}
+                />
             ) : null}
         </div>
     );

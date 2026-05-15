@@ -14,6 +14,7 @@ import { BaiVietEntity } from "./entities/bai-viet.entity";
 import { BinhLuanEntity } from "./entities/binh-luan.entity";
 import { MonAnEntity } from "./entities/mon-an.entity";
 import { CuaHangEntity } from "./entities/cua-hang.entity";
+import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entity";
 
 type Actor = {
   id: number;
@@ -41,7 +42,55 @@ export class AdminReportService {
     private readonly monAnRepo: Repository<MonAnEntity>,
     @InjectRepository(CuaHangEntity)
     private readonly cuaHangRepo: Repository<CuaHangEntity>,
+    @InjectRepository(QuanHeNguoiDungEntity)
+    private readonly quanHeRepo: Repository<QuanHeNguoiDungEntity>,
   ) {}
+
+  private async tinhLaiDiemUyTin(userId: number): Promise<void> {
+    const nguoiDung = await this.nguoiDungRepo.findOne({ where: { id: userId } });
+    if (!nguoiDung) return;
+
+    const likeRaw = await this.baiVietRepo
+      .createQueryBuilder('bv')
+      .select('COALESCE(SUM(bv.tong_luot_thich), 0)', 'total')
+      .where('bv.id_nguoi_dang = :userId', { userId })
+      .getRawOne<{ total: string }>();
+    const totalLikes = Number(likeRaw?.total ?? 0);
+
+    const cmtRaw = await this.baiVietRepo
+      .createQueryBuilder('bv')
+      .select('COALESCE(SUM(bv.tong_luot_binh_luan), 0)', 'total')
+      .where('bv.id_nguoi_dang = :userId', { userId })
+      .getRawOne<{ total: string }>();
+    const totalComments = Number(cmtRaw?.total ?? 0);
+
+    const followers = await this.quanHeRepo.count({
+      where: { id_nguoi_nhan_quan_he: userId, loai_quan_he: 'theo_doi', trang_thai: 'hieu_luc' },
+    });
+
+    const daysActive = nguoiDung.ngay_tao
+      ? Math.floor((Date.now() - new Date(nguoiDung.ngay_tao).getTime()) / 86400000)
+      : 0;
+
+    const postCount = await this.baiVietRepo.count({
+      where: { id_nguoi_dang: userId, trang_thai_duyet: 'hien_thi' },
+    });
+
+    const violations = await this.baoCaoRepo.count({
+      where: { id_nguoi_vi_pham: userId, trang_thai: 'da_xu_ly' },
+    });
+
+    const score =
+      Math.min(1, totalLikes / 500) * 3.0 +
+      Math.min(1, totalComments / 200) * 2.0 +
+      Math.min(1, followers / 500) * 2.0 +
+      Math.min(1, daysActive / 365) * 1.0 +
+      Math.min(1, postCount / 20) * 2.0 -
+      violations * 0.5;
+
+    const rounded = Math.round(Math.max(0, Math.min(10, score)) * 10) / 10;
+    await this.nguoiDungRepo.update({ id: userId }, { diem_uy_tin: rounded });
+  }
 
   async layDanhSach(query: {
     tim_kiem?: string;
@@ -289,6 +338,9 @@ export class AdminReportService {
       }
 
       await baoCaoRepo.save(baoCao);
+      if (baoCao.id_nguoi_vi_pham) {
+        void this.tinhLaiDiemUyTin(Number(baoCao.id_nguoi_vi_pham));
+      }
       await nhatKyRepo.save({
         id_nguoi_thuc_hien: actor.id,
         loai_doi_tuong: "bao_cao",

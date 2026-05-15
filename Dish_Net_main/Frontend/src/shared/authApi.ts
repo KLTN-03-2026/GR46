@@ -16,6 +16,7 @@ type ThongTinNguoiDung = {
   la_chu_cua_hang: boolean;
   la_nha_sang_tao?: boolean;
   trang_thai_kiem_tien_noi_dung?: string;
+  id_cua_hang?: number | null;
 };
 
 function isApiEnvelope<T>(value: unknown): value is ApiEnvelope<T> {

@@ -32,7 +32,7 @@ export default function Header() {
     const isHome = pathname === '/';
     const isRanking = pathname.startsWith('/ranking');
     const isExplore = pathname.startsWith('/explore');
-    const isStorePage = pathname.startsWith('/store');
+    const isStorePage = pathname.startsWith('/store') && !pathname.startsWith('/store-profile');
     const [searchValue, setSearchValue] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -200,7 +200,7 @@ export default function Header() {
         router.push('/login');
     };
 
-    const vaiTroLabel = nguoiDung?.vai_tro === 'chu_cua_hang' ? 'Cửa hàng'
+    const vaiTroLabel = isStorePage && nguoiDung?.vai_tro === 'chu_cua_hang' ? 'Cửa hàng'
         : nguoiDung?.vai_tro === 'admin' ? 'Admin' : 'Người dùng';
     const avatarSrc =
         nguoiDung?.anh_dai_dien && String(nguoiDung.anh_dai_dien).trim()
@@ -236,6 +236,7 @@ export default function Header() {
                             onFocus={() => { setSearchValue(currentQuery || searchValue); setIsSearchOpen(true); }}
                             onChange={(event) => setSearchValue(event.target.value)}
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitSearch(searchValue); } }}
+                            autoComplete="off"
                             className="flex-1 border-none bg-transparent text-base placeholder:text-text-gray" id="search-input" />
                     </div>
 
@@ -395,15 +396,15 @@ export default function Header() {
                                                 </div>
                                             </div>
                                             <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                                                nguoiDung.vai_tro === 'chu_cua_hang' ? 'bg-[#fff1ee] text-[#d92d20]' : 'bg-[#edf7ed] text-[#2f7d32]'
+                                                isStorePage && nguoiDung.vai_tro === 'chu_cua_hang' ? 'bg-[#fff1ee] text-[#d92d20]' : 'bg-[#edf7ed] text-[#2f7d32]'
                                             }`}>{vaiTroLabel}</span>
                                         </div>
                                     </div>
 
                                     <div className="py-2">
-                                        {nguoiDung.vai_tro === 'chu_cua_hang' ? (
+                                        {isStorePage && nguoiDung.vai_tro === 'chu_cua_hang' ? (
                                             <>
-                                                <Link href="/store-profile" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trang cửa hàng</Link>
+                                                <Link href="/store/profile" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">Trang cửa hàng</Link>
                                                 <Link href="/messages" className="block px-5 py-3 text-[17px] text-[#333333] transition hover:bg-[#f6faf4]">
                                                     Tin nhắn cửa hàng
                                                     {unreadMessageCount > 0 ? (

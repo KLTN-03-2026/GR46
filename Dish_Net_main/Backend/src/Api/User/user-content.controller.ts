@@ -326,6 +326,7 @@ export class UserContentController {
     const host = req.get('host') ?? '127.0.0.1:3009';
     const protocol = req.protocol ?? 'http';
     const url = `${protocol}://${host}/uploads/avatars/${file.filename}`;
+    await this.userContentService.capNhatAnhDaiDien(req.user!.sub, url);
     return { url };
   }
 

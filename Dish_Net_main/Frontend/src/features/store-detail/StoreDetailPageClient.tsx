@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -87,6 +87,48 @@ function ReviewerCard({
     onOrderNow?: () => void;
     onNavigateToProfile?: (userId: string) => void;
 }) {
+    const { dangNhap } = useAuth();
+    const [isLiked, setIsLiked] = useState(false);
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [isFollowLoading, setIsFollowLoading] = useState(false);
+    const [showCommentBox, setShowCommentBox] = useState(false);
+    const [commentText, setCommentText] = useState('');
+    const [commentSubmitted, setCommentSubmitted] = useState(false);
+    const commentRef = useRef<HTMLTextAreaElement>(null);
+
+    const handleLike = () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        setIsLiked((prev) => !prev);
+    };
+
+    const handleFollow = async () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        if (!userId || isFollowLoading) return;
+        setIsFollowLoading(true);
+        try {
+            const res = await userCommerceApi.toggleTheoDoi(Number(userId));
+            setIsFollowing((res as { dang_theo_doi: boolean }).dang_theo_doi);
+        } catch { /* ignore */ } finally {
+            setIsFollowLoading(false);
+        }
+    };
+
+    const handleCommentToggle = () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        setShowCommentBox((prev) => {
+            if (!prev) setTimeout(() => commentRef.current?.focus(), 50);
+            return !prev;
+        });
+    };
+
+    const handleCommentSubmit = () => {
+        if (!commentText.trim()) return;
+        setCommentText('');
+        setCommentSubmitted(true);
+        setShowCommentBox(false);
+        setTimeout(() => setCommentSubmitted(false), 3000);
+    };
+
     return (
         <article className="rounded-[18px] border border-[#ebe5dd] bg-[#fff6ee] p-5 shadow-[0_8px_22px_rgba(0,0,0,0.05)]">
             <div className="flex items-center justify-between gap-4">
@@ -115,7 +157,18 @@ function ReviewerCard({
                         <p className="text-sm text-[#6b7280]">{date}</p>
                     </div>
                 </div>
-                <button onClick={onRequireLogin} className="rounded-full bg-[#2f9e2f] px-5 py-2 text-sm font-bold text-white">Follow +</button>
+                <button
+                    type="button"
+                    onClick={() => void handleFollow()}
+                    disabled={isFollowLoading}
+                    className={`rounded-full px-5 py-2 text-sm font-bold transition disabled:opacity-60 ${
+                        isFollowing
+                            ? 'border border-[#2f9e2f] bg-white text-[#2f9e2f] hover:bg-[#effced]'
+                            : 'bg-[#2f9e2f] text-white hover:bg-[#267a25]'
+                    }`}
+                >
+                    {isFollowing ? 'Đang theo dõi' : 'Follow +'}
+                </button>
             </div>
 
             <div className="mt-4 flex items-center justify-between border-y border-[#efe5d9] py-3 text-sm text-[#5b6475]">
@@ -136,13 +189,10 @@ function ReviewerCard({
                 <img src={gallery[0] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
                 <img src={gallery[1] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
                 <img src={gallery[2] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                <button
-                    onClick={onRequireLogin}
-                    className="relative h-[68px] w-full overflow-hidden rounded-[12px]"
-                >
+                <div className="relative h-[68px] w-full overflow-hidden rounded-[12px]">
                     <img src={gallery[3] ?? gallery[2] ?? heroImage} alt="" className="h-full w-full object-cover brightness-50" />
                     <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">Xem thêm</span>
-                </button>
+                </div>
             </div>
 
             <p className="mt-4 text-[15px] leading-8 text-[#3f3f46]">{excerpt}</p>
@@ -153,21 +203,67 @@ function ReviewerCard({
                 <span className="rounded-full bg-[#ffe8c8] px-4 py-2 text-sm font-semibold text-[#d58800]">Đậm vị</span>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-t border-[#efe5d9] pt-4">
-                <div className="flex items-center gap-8 text-[15px] text-[#4b5563]">
-                    <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-red-500">
-                        <IconHeart /> Yêu thích
-                    </button>
-                    <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#2f9e2f]">
-                        <IconComment /> Bình luận
+            <div className="mt-4 border-t border-[#efe5d9] pt-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-8 text-[15px] text-[#4b5563]">
+                        <button
+                            type="button"
+                            onClick={handleLike}
+                            className={`flex items-center gap-1.5 transition ${isLiked ? 'text-red-500' : 'hover:text-red-500'}`}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={isLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            Yêu thích
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCommentToggle}
+                            className={`flex items-center gap-1.5 transition ${showCommentBox ? 'text-[#2f9e2f]' : 'hover:text-[#2f9e2f]'}`}
+                        >
+                            <IconComment /> Bình luận
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onOrderNow}
+                        className="rounded-full border border-[#2f9e2f] px-6 py-2 text-sm font-bold text-[#2f9e2f] transition hover:bg-[#effced]"
+                    >
+                        Đặt món
                     </button>
                 </div>
-                <button
-                    onClick={onOrderNow}
-                    className="rounded-full border border-[#2f9e2f] px-6 py-2 text-sm font-bold text-[#2f9e2f] transition hover:bg-[#effced]"
-                >
-                    Đặt món
-                </button>
+
+                {commentSubmitted && (
+                    <p className="mt-3 text-sm text-[#2f9e2f]">✓ Bình luận của bạn đã được ghi nhận!</p>
+                )}
+
+                {showCommentBox && (
+                    <div className="mt-3 flex flex-col gap-2">
+                        <textarea
+                            ref={commentRef}
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            placeholder="Viết bình luận của bạn..."
+                            rows={2}
+                            className="w-full resize-none rounded-[10px] border border-[#d1d5db] px-3 py-2 text-sm outline-none focus:border-[#2f9e2f]"
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCommentBox(false)}
+                                className="rounded-full px-4 py-1.5 text-sm text-[#6b7280] hover:bg-[#f3f4f6]"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCommentSubmit}
+                                disabled={!commentText.trim()}
+                                className="rounded-full bg-[#2f9e2f] px-4 py-1.5 text-sm font-bold text-white disabled:opacity-50 hover:bg-[#267a25]"
+                            >
+                                Gửi
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </article>
     );
@@ -182,6 +278,41 @@ function UserCommentCard({
     onRequireLogin?: () => void;
     onNavigateToProfile?: (userId: string) => void;
 }) {
+    const { dangNhap } = useAuth();
+    const [isLiked, setIsLiked] = useState(false);
+    const [showCommentBox, setShowCommentBox] = useState(false);
+    const [commentText, setCommentText] = useState('');
+    const [commentSubmitted, setCommentSubmitted] = useState(false);
+    const [reportDone, setReportDone] = useState(false);
+    const commentRef = useRef<HTMLTextAreaElement>(null);
+
+    const handleLike = () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        setIsLiked((prev) => !prev);
+    };
+
+    const handleCommentToggle = () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        setShowCommentBox((prev) => {
+            if (!prev) setTimeout(() => commentRef.current?.focus(), 50);
+            return !prev;
+        });
+    };
+
+    const handleCommentSubmit = () => {
+        if (!commentText.trim()) return;
+        setCommentText('');
+        setCommentSubmitted(true);
+        setShowCommentBox(false);
+        setTimeout(() => setCommentSubmitted(false), 3000);
+    };
+
+    const handleReport = () => {
+        if (!dangNhap) { onRequireLogin?.(); return; }
+        setReportDone(true);
+        setTimeout(() => setReportDone(false), 3000);
+    };
+
     return (
         <article className="rounded-[18px] bg-white p-8 shadow-[0_10px_28px_rgba(0,0,0,0.08)]">
             <div className="flex items-start justify-between gap-4 border-b border-[#e9efe6] pb-5">
@@ -224,17 +355,66 @@ function UserCommentCard({
                 ) : null}
             </div>
 
-            <div className="mt-5 flex items-center gap-8 text-[15px] text-[#6b7280]">
-                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-red-500">
-                    <IconHeart /> Thích
-                </button>
-                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#2f9e2f]">
-                    <IconComment /> Thảo luận
-                </button>
-                <button type="button" onClick={onRequireLogin} className="flex items-center gap-1.5 hover:text-[#f59e0b]">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    Báo lỗi
-                </button>
+            <div className="mt-5">
+                <div className="flex items-center gap-8 text-[15px] text-[#6b7280]">
+                    <button
+                        type="button"
+                        onClick={handleLike}
+                        className={`flex items-center gap-1.5 transition ${isLiked ? 'text-red-500' : 'hover:text-red-500'}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={isLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        Thích
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleCommentToggle}
+                        className={`flex items-center gap-1.5 transition ${showCommentBox ? 'text-[#2f9e2f]' : 'hover:text-[#2f9e2f]'}`}
+                    >
+                        <IconComment /> Thảo luận
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleReport}
+                        className={`flex items-center gap-1.5 transition ${reportDone ? 'text-[#f59e0b]' : 'hover:text-[#f59e0b]'}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        {reportDone ? 'Đã ghi nhận' : 'Báo lỗi'}
+                    </button>
+                </div>
+
+                {commentSubmitted && (
+                    <p className="mt-3 text-sm text-[#2f9e2f]">✓ Bình luận của bạn đã được ghi nhận!</p>
+                )}
+
+                {showCommentBox && (
+                    <div className="mt-3 flex flex-col gap-2">
+                        <textarea
+                            ref={commentRef}
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            placeholder="Viết thảo luận của bạn..."
+                            rows={2}
+                            className="w-full resize-none rounded-[10px] border border-[#d1d5db] px-3 py-2 text-sm outline-none focus:border-[#2f9e2f]"
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCommentBox(false)}
+                                className="rounded-full px-4 py-1.5 text-sm text-[#6b7280] hover:bg-[#f3f4f6]"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCommentSubmit}
+                                disabled={!commentText.trim()}
+                                className="rounded-full bg-[#2f9e2f] px-4 py-1.5 text-sm font-bold text-white disabled:opacity-50 hover:bg-[#267a25]"
+                            >
+                                Gửi
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </article>
     );
@@ -302,10 +482,19 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const [cartActionMessage, setCartActionMessage] = useState<string | null>(null);
     const [cartActionError, setCartActionError] = useState<string | null>(null);
     const [isAddingToCart, setIsAddingToCart] = useState(false);
+    const [dangTheoDoi, setDangTheoDoi] = useState(false);
+    const [isFollowLoading, setIsFollowLoading] = useState(false);
+
+    const [selectedToppingIds, setSelectedToppingIds] = useState<Set<string>>(new Set());
+    const toggleTopping = (id: string) => setSelectedToppingIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
 
     const visibleMenu = useMemo(() => store.menuItems.slice(0, 10), [store.menuItems]);
     const hasReviews = store.reviewCards.length > 0;
-    const openLoginRequired = () => setIsLoginRequiredOpen(true);
+    const openLoginRequired = () => { if (!dangNhap) setIsLoginRequiredOpen(true); };
 
     const menuCategories = useMemo(
         () => [{ id: 'tat-ca', label: 'Tất cả' }, ...store.menuCategories],
@@ -401,11 +590,35 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
         };
     }, [loadStoreCartSummary]);
 
+    useEffect(() => {
+        if (!dangNhap || !store.ownerId) return;
+        userCommerceApi.layTrangThaiTuongTac(store.ownerId)
+            .then((res) => { setDangTheoDoi((res as { dang_theo_doi: boolean }).dang_theo_doi ?? false); })
+            .catch(() => {});
+    }, [dangNhap, store.ownerId]);
+
+    const handleFollow = async () => {
+        if (!dangNhap) { setIsLoginRequiredOpen(true); return; }
+        if (!store.ownerId || isFollowLoading) return;
+        setIsFollowLoading(true);
+        try {
+            const res = await userCommerceApi.toggleTheoDoi(store.ownerId);
+            setDangTheoDoi((res as { dang_theo_doi: boolean }).dang_theo_doi);
+        } catch { /* ignore */ } finally {
+            setIsFollowLoading(false);
+        }
+    };
+
     const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
     const selectedPackagingPrice =
         PACKAGING_OPTIONS.find((option) => option.id === selectedPackaging)?.extraPrice ?? 0;
+    const selectedToppingsPrice = selectedDish
+        ? selectedDish.toppings
+              .filter((t) => selectedToppingIds.has(String(t.id)))
+              .reduce((sum, t) => sum + Number(t.gia ?? 0), 0)
+        : 0;
     const selectedDishTotal =
-        (selectedDishBasePrice + selectedPackagingPrice) * dishQuantity;
+        (selectedDishBasePrice + selectedPackagingPrice + selectedToppingsPrice) * dishQuantity;
 
     const resolveBackendMonAnId = async (item: MenuItem) => {
         const numericId = Number(item.id);
@@ -458,7 +671,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
         return Number(rows[0]?.id ?? 0) || null;
     };
 
-    const addToCart = async (item: MenuItem, quantity = 1, note?: string) => {
+    const addToCart = async (item: MenuItem, quantity = 1, note?: string, toppings?: { id: number; ten_topping: string; gia: number }[]) => {
         if (!dangNhap) {
             setIsLoginRequiredOpen(true);
             return false;
@@ -509,6 +722,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                 id_mon_an: monAnId,
                 so_luong: quantity,
                 ghi_chu: note?.trim() || undefined,
+                toppings: toppings && toppings.length > 0 ? toppings : undefined,
             });
             await loadStoreCartSummary();
             setCartActionMessage('Đã thêm món vào giỏ hàng');
@@ -529,6 +743,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
         setDishQuantity(1);
         setSelectedPackaging(PACKAGING_OPTIONS[0].id);
         setDishNote('');
+        setSelectedToppingIds(new Set());
     };
 
     const openMenuModal = (item?: MenuItem) => {
@@ -621,21 +836,23 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                         <div className="p-6 md:p-7">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    {store.ownerId ? (
-                                        <Link
-                                            href={`/profile/${store.ownerId}`}
-                                            className="text-[32px] font-bold leading-tight text-black hover:underline md:text-[36px]"
-                                        >
-                                            {store.title}
-                                        </Link>
-                                    ) : (
-                                        <h1 className="text-[32px] font-bold leading-tight text-black md:text-[36px]">{store.title}</h1>
-                                    )}
+                                    <Link
+                                        href={`/profile/store/${store.id}`}
+                                        className="text-[32px] font-bold leading-tight text-black hover:underline md:text-[36px]"
+                                    >
+                                        {store.title}
+                                    </Link>
                                     <p className="mt-3 text-[16px] text-[#4b5563]">{store.subtitle}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[18px] font-bold text-[#f59e0b]">{store.views}</p>
-                                    <button className="mt-3 rounded-full bg-[#2f9e2f] px-5 py-2 text-sm font-bold text-white">Follow +</button>
+                                    <button
+                                        onClick={() => void handleFollow()}
+                                        disabled={isFollowLoading}
+                                        className={`mt-3 rounded-full px-5 py-2 text-sm font-bold text-white transition-colors ${dangTheoDoi ? 'bg-[#6b7280]' : 'bg-[#2f9e2f]'}`}
+                                    >
+                                        {dangTheoDoi ? 'Đang theo dõi' : 'Follow +'}
+                                    </button>
                                 </div>
                             </div>
 
@@ -818,16 +1035,12 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f59e0b] text-[20px] font-bold text-white">
                                     {store.score}
                                 </div>
-                                {store.ownerId ? (
-                                    <Link
-                                        href={`/profile/${store.ownerId}`}
-                                        className="text-[28px] font-bold leading-tight text-black hover:underline"
-                                    >
-                                        {store.title}
-                                    </Link>
-                                ) : (
-                                    <h2 className="text-[28px] font-bold leading-tight text-black">{store.title}</h2>
-                                )}
+                                <Link
+                                    href={`/profile/store/${store.id}`}
+                                    className="text-[28px] font-bold leading-tight text-black hover:underline"
+                                >
+                                    {store.title}
+                                </Link>
                             </div>
                         </aside>
 
@@ -1076,7 +1289,7 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                     onClick={() => setSelectedDish(null)}
                 >
                     <div
-                        className="relative w-full max-w-[700px] overflow-hidden rounded-[18px] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.34)]"
+                        className="relative flex max-h-[min(82vh,680px)] w-full max-w-[700px] flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.34)]"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <button
@@ -1088,10 +1301,10 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                             ×
                         </button>
 
-                        <div className="max-h-[min(82vh,680px)] overflow-y-auto">
+                        <div className="min-h-0 flex-1 overflow-y-auto">
                             <img src={selectedDish.image} alt={selectedDish.name} className="h-[170px] w-full object-cover sm:h-[200px]" />
 
-                            <div className="px-4 pb-5 pt-4 sm:px-6">
+                            <div className="px-4 pb-4 pt-4 sm:px-6">
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div>
                                         <h3 className="text-[26px] font-semibold leading-tight text-black">{selectedDish.name}</h3>
@@ -1110,6 +1323,30 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                         onChange={setSelectedPackaging}
                                     />
 
+                                    {selectedDish.toppings.length > 0 && (
+                                        <section className="rounded-[10px] border border-[#ececec] p-3">
+                                            <p className="mb-2 text-[13px] font-medium text-[#616462]">Topping</p>
+                                            <div className="space-y-2">
+                                                {selectedDish.toppings.map((t) => (
+                                                    <label key={t.id} className="flex cursor-pointer items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedToppingIds.has(String(t.id))}
+                                                                onChange={() => toggleTopping(String(t.id))}
+                                                                className="h-4 w-4 accent-[#f59e0b]"
+                                                            />
+                                                            <span className="text-[14px] text-[#374151]">{t.ten_topping}</span>
+                                                        </div>
+                                                        <span className="text-[13px] text-[#f59e0b]">
+                                                            {Number(t.gia) > 0 ? `+${Number(t.gia).toLocaleString('vi-VN')}đ` : 'Miễn phí'}
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )}
+
                                     <section className="rounded-[10px] border border-[#ececec] p-3">
                                         <label className="mb-2 flex items-center gap-2 text-[13px] font-medium text-[#616462]" htmlFor="dish-note">
                                             📝 Ghi chú cho quán
@@ -1123,60 +1360,67 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                         />
                                     </section>
                                 </div>
+                            </div>
+                        </div>
 
-                                <div className="mt-4 flex flex-col gap-3 rounded-[12px] bg-[#f8faf8] p-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setDishQuantity((value) => Math.max(value - 1, 1))}
-                                            className="flex h-[36px] w-[40px] items-center justify-center rounded-[9px] bg-[#fceee7] text-[24px] font-medium text-black"
-                                            aria-label="Giảm số lượng"
-                                        >
-                                            -
-                                        </button>
-                                        <span className="w-8 text-center text-[24px] font-medium text-black">{dishQuantity}</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (dishQuantity >= MAX_QUANTITY_PER_ITEM) {
-                                                    setCartActionError(
-                                                        `Mỗi món chỉ được tối đa ${MAX_QUANTITY_PER_ITEM} phần.`,
-                                                    );
-                                                    return;
-                                                }
-                                                setDishQuantity((value) => value + 1);
-                                            }}
-                                            className="flex h-[36px] w-[40px] items-center justify-center rounded-[9px] bg-[#f59e0b] text-[24px] font-medium text-white"
-                                            aria-label="Tăng số lượng"
-                                        >
-                                            +
-                                        </button>
-                                    </div>
-
+                        {/* Bottom bar sticky - luôn hiển thị, không cuộn theo */}
+                        <div className="border-t border-[#ececec] bg-white px-4 py-3 sm:px-6">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-3">
                                     <button
                                         type="button"
-                                        onClick={async () => {
-                                            const success = await addToCart(
-                                                selectedDish,
-                                                dishQuantity,
-                                                dishNote,
-                                            );
-                                            if (success) {
-                                                setSelectedDish(null);
-                                            }
-                                        }}
-                                        className="rounded-[10px] bg-[#f59e0b] px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-[#db8f08] disabled:opacity-70"
-                                        disabled={isAddingToCart}
+                                        onClick={() => setDishQuantity((value) => Math.max(value - 1, 1))}
+                                        className="flex h-[36px] w-[40px] items-center justify-center rounded-[9px] bg-[#fceee7] text-[24px] font-medium text-black"
+                                        aria-label="Giảm số lượng"
                                     >
-                                        {isAddingToCart
-                                            ? 'Đang thêm...'
-                                            : `Thêm vào giỏ hàng - ${formatCurrency(selectedDishTotal)}`}
+                                        -
+                                    </button>
+                                    <span className="w-8 text-center text-[24px] font-medium text-black">{dishQuantity}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (dishQuantity >= MAX_QUANTITY_PER_ITEM) {
+                                                setCartActionError(
+                                                    `Mỗi món chỉ được tối đa ${MAX_QUANTITY_PER_ITEM} phần.`,
+                                                );
+                                                return;
+                                            }
+                                            setDishQuantity((value) => value + 1);
+                                        }}
+                                        className="flex h-[36px] w-[40px] items-center justify-center rounded-[9px] bg-[#f59e0b] text-[24px] font-medium text-white"
+                                        aria-label="Tăng số lượng"
+                                    >
+                                        +
                                     </button>
                                 </div>
-                                {cartActionError ? (
-                                    <p className="mt-3 text-sm text-red-500">{cartActionError}</p>
-                                ) : null}
+
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        const selectedToppingsList = selectedDish.toppings
+                                            .filter((t) => selectedToppingIds.has(String(t.id)))
+                                            .map((t) => ({ id: Number(t.id), ten_topping: t.ten_topping, gia: Number(t.gia) }));
+                                        const success = await addToCart(
+                                            selectedDish,
+                                            dishQuantity,
+                                            dishNote,
+                                            selectedToppingsList.length > 0 ? selectedToppingsList : undefined,
+                                        );
+                                        if (success) {
+                                            setSelectedDish(null);
+                                        }
+                                    }}
+                                    className="rounded-[10px] bg-[#f59e0b] px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-[#db8f08] disabled:opacity-70"
+                                    disabled={isAddingToCart}
+                                >
+                                    {isAddingToCart
+                                        ? 'Đang thêm...'
+                                        : `Thêm vào giỏ hàng - ${formatCurrency(selectedDishTotal)}`}
+                                </button>
                             </div>
+                            {cartActionError ? (
+                                <p className="mt-2 text-sm text-red-500">{cartActionError}</p>
+                            ) : null}
                         </div>
                     </div>
                 </div>

@@ -183,6 +183,7 @@ export default function CommentModal({
   isOpen,
   onClose,
   storeName = 'Nét Huế - Hàng Bông',
+  coverImage,
   startComposerOpen = false,
   postId,
   onCommentPosted,
@@ -190,6 +191,7 @@ export default function CommentModal({
   isOpen: boolean;
   onClose: () => void;
   storeName?: string;
+  coverImage?: string | null;
   startComposerOpen?: boolean;
   postId?: number | null;
   onCommentPosted?: (postId: number) => void;
@@ -536,7 +538,7 @@ export default function CommentModal({
         <aside className="flex h-full w-full max-w-[330px] shrink-0 flex-col overflow-hidden border-r border-[#e7e7e1] bg-white">
           <div className="border-b border-[#ecece7] px-5 pb-4 pt-5">
             <img
-              src={modalAssets.storeImage}
+              src={coverImage || modalAssets.storeImage}
               alt={storeName}
               className="h-[200px] w-full rounded-[14px] object-cover"
             />
@@ -564,27 +566,27 @@ export default function CommentModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden p-5" style={{ paddingTop: '4px' }}>
-            <div className="rounded-[16px] bg-[#f7f8f4] p-4">
+          <div className="flex-1 overflow-hidden p-3" style={{ paddingTop: '4px' }}>
+            <div className="rounded-[16px] bg-[#f7f8f4] p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8e9488]">
                 Tóm tắt
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-[14px] bg-white p-4">
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <div className="rounded-[12px] bg-white p-2.5">
                   <p className="text-xs text-[#7f8579]">Độ hài lòng</p>
-                  <p className="mt-2 text-2xl font-bold text-[#2d6c1b]">{sentiment}%</p>
+                  <p className="mt-1 text-lg font-bold text-[#2d6c1b]">{sentiment}%</p>
                 </div>
-                <div className="rounded-[14px] bg-white p-4">
+                <div className="rounded-[12px] bg-white p-2.5">
                   <p className="text-xs text-[#7f8579]">Phục vụ</p>
-                  <p className="mt-2 text-2xl font-bold text-[#2e2e2e]">Nhanh</p>
+                  <p className="mt-1 text-lg font-bold text-[#2e2e2e]">Nhanh</p>
                 </div>
-                <div className="rounded-[14px] bg-white p-4">
+                <div className="rounded-[12px] bg-white p-2.5">
                   <p className="text-xs text-[#7f8579]">Món nổi bật</p>
-                  <p className="mt-2 text-lg font-bold text-[#2e2e2e]">Best seller</p>
+                  <p className="mt-1 text-base font-bold text-[#2e2e2e]">Best seller</p>
                 </div>
-                <div className="rounded-[14px] bg-white p-4">
+                <div className="rounded-[12px] bg-white p-2.5">
                   <p className="text-xs text-[#7f8579]">Giá tham khảo</p>
-                  <p className="mt-2 text-lg font-bold text-[#2e2e2e]">55k-95k</p>
+                  <p className="mt-1 text-base font-bold text-[#2e2e2e]">55k-95k</p>
                 </div>
               </div>
             </div>

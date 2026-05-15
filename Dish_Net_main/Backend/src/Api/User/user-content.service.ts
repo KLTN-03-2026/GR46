@@ -1818,6 +1818,7 @@ export class UserContentService {
 
     if (relation) {
       await this.quanHeNguoiDungRepo.delete({ id: relation.id });
+      void this.tinhLaiDiemUyTin(idNguoiDung);
       return { dang_theo_doi: false, hanh_dong: 'huy_theo_doi' };
     }
 
@@ -1828,6 +1829,7 @@ export class UserContentService {
       trang_thai: 'hieu_luc',
       ngay_tao: new Date(),
     });
+    void this.tinhLaiDiemUyTin(idNguoiDung);
     return { dang_theo_doi: true, hanh_dong: 'theo_doi' };
   }
 
@@ -2686,6 +2688,7 @@ export class UserContentService {
     });
 
     await this.baiVietRepo.increment({ id: idBaiViet }, 'tong_luot_binh_luan', 1);
+    void this.tinhLaiDiemUyTin(Number(baiViet.id_nguoi_dang));
 
     const nguoiBinhLuan = await this.nguoiDungRepo.findOne({
       where: { id: idNguoiDung },
@@ -2903,6 +2906,10 @@ export class UserContentService {
         where: { id: params.idBaiViet },
       });
 
+      if (params.loaiTuongTac === 'thich' && refreshed?.id_nguoi_dang) {
+        void this.tinhLaiDiemUyTin(Number(refreshed.id_nguoi_dang));
+      }
+
       return {
         da_tuong_tac: false,
         hanh_dong: 'bo_tuong_tac',
@@ -2930,6 +2937,10 @@ export class UserContentService {
       where: { id: params.idBaiViet },
     });
 
+    if (params.loaiTuongTac === 'thich' && refreshed?.id_nguoi_dang) {
+      void this.tinhLaiDiemUyTin(Number(refreshed.id_nguoi_dang));
+    }
+
     return {
       da_tuong_tac: true,
       hanh_dong: 'tao_tuong_tac',
@@ -2938,6 +2949,68 @@ export class UserContentService {
           0,
       ),
     };
+  }
+
+  async capNhatAnhDaiDien(userId: number, url: string): Promise<void> {
+    await this.nguoiDungRepo.update({ id: userId }, { anh_dai_dien: url });
+  }
+
+  async tinhLaiDiemUyTin(userId: number): Promise<void> {
+    const nguoiDung = await this.nguoiDungRepo.findOne({ where: { id: userId } });
+    if (!nguoiDung) return;
+
+    // Tổng lượt thích tất cả bài viết
+    const likeRaw = await this.baiVietRepo
+      .createQueryBuilder('bv')
+      .select('COALESCE(SUM(bv.tong_luot_thich), 0)', 'total')
+      .where('bv.id_nguoi_dang = :userId', { userId })
+      .getRawOne<{ total: string }>();
+    const totalLikes = Number(likeRaw?.total ?? 0);
+
+    // Tổng lượt bình luận tất cả bài viết
+    const cmtRaw = await this.baiVietRepo
+      .createQueryBuilder('bv')
+      .select('COALESCE(SUM(bv.tong_luot_binh_luan), 0)', 'total')
+      .where('bv.id_nguoi_dang = :userId', { userId })
+      .getRawOne<{ total: string }>();
+    const totalComments = Number(cmtRaw?.total ?? 0);
+
+    // Số người theo dõi
+    const followers = await this.quanHeNguoiDungRepo.count({
+      where: { id_nguoi_nhan_quan_he: userId, loai_quan_he: 'theo_doi', trang_thai: 'hieu_luc' },
+    });
+
+    // Số ngày hoạt động kể từ ngày tạo
+    const daysActive = nguoiDung.ngay_tao
+      ? Math.floor((Date.now() - new Date(nguoiDung.ngay_tao).getTime()) / 86400000)
+      : 0;
+
+    // Số bài viết
+    const postCount = await this.baiVietRepo.count({
+      where: { id_nguoi_dang: userId, trang_thai_duyet: 'hien_thi' },
+    });
+
+    // Số vi phạm đã xác nhận
+    const violations = await this.baiVietRepo.manager
+      .getRepository('bao_cao')
+      .createQueryBuilder('bc')
+      .where('bc.id_nguoi_vi_pham = :userId', { userId })
+      .andWhere("bc.trang_thai = 'da_xu_ly'")
+      .getCount();
+
+    // Công thức: chuẩn hóa từng thành phần về 0-1 rồi nhân trọng số
+    const score =
+      Math.min(1, totalLikes / 500) * 3.0 +
+      Math.min(1, totalComments / 200) * 2.0 +
+      Math.min(1, followers / 500) * 2.0 +
+      Math.min(1, daysActive / 365) * 1.0 +
+      Math.min(1, postCount / 20) * 2.0 -
+      violations * 0.5;
+
+    const diemUyTin = Math.max(0, Math.min(10, score));
+    const rounded = Math.round(diemUyTin * 10) / 10;
+
+    await this.nguoiDungRepo.update({ id: userId }, { diem_uy_tin: rounded });
   }
 
   async nhanLinkMon(

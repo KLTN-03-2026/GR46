@@ -52,6 +52,7 @@ export interface FeedPost {
     authorId?: number;
     storeId?: number;
     storeName?: string;
+    storeAvatar?: string;
     author: string;
     authorAvatar: string;
     date: string;

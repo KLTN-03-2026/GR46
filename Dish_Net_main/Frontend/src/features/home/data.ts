@@ -73,6 +73,7 @@ export function mapFeedPosts(feedPayload: any) {
             authorId: Number(item?.thong_tin_nguoi_dang?.id || 0),
             storeId: item?.cua_hang?.id != null ? Number(item.cua_hang.id) : undefined,
             storeName: item?.cua_hang?.ten_cua_hang ? String(item.cua_hang.ten_cua_hang) : undefined,
+            storeAvatar: item?.cua_hang?.anh_dai_dien ? String(item.cua_hang.anh_dai_dien) : undefined,
             author: item?.thong_tin_nguoi_dang?.ten_hien_thi || 'Người dùng',
             authorAvatar: item?.thong_tin_nguoi_dang?.anh_dai_dien || reviewerAvatar,
             date: String(item?.ngay_dang ?? ''),

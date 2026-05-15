@@ -62,6 +62,26 @@ function PersonalInfoTab({ profile }: { profile: UserProfile }) {
     const [saveError, setSaveError] = useState<string | null>(null);
     const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string>(profile.avatar);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsUploadingAvatar(true);
+        setSaveError(null);
+        try {
+            const res = await userContentApi.uploadAnhDaiDien(file);
+            setAvatarPreview(res.url);
+            await kiemTraPhien();
+            setSaveSuccess('Đã cập nhật ảnh đại diện.');
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : 'Không thể tải ảnh lên');
+        } finally {
+            setIsUploadingAvatar(false);
+            if (avatarInputRef.current) avatarInputRef.current.value = '';
+        }
+    };
 
     const handleReset = () => {
         setName(profile.handle);
@@ -116,19 +136,26 @@ function PersonalInfoTab({ profile }: { profile: UserProfile }) {
             {/* Avatar row */}
             <div className="mt-6 flex items-center justify-between rounded-[14px] border border-[#e8e5dc] bg-[#fdfcf8] px-6 py-5">
                 <img
-                    src={profile.avatar}
+                    src={avatarPreview}
                     alt={profile.name}
                     className="h-14 w-14 rounded-full object-cover"
                 />
                 <button
                     type="button"
                     onClick={() => avatarInputRef.current?.click()}
-                    className="rounded-[8px] bg-[#333] px-6 py-2.5 text-[14px] font-bold text-white transition hover:bg-[#555]"
+                    disabled={isUploadingAvatar}
+                    className="rounded-[8px] bg-[#333] px-6 py-2.5 text-[14px] font-bold text-white transition hover:bg-[#555] disabled:cursor-not-allowed disabled:opacity-60"
                     id="btn-change-avatar-settings"
                 >
-                    Đổi ảnh
+                    {isUploadingAvatar ? 'Đang tải...' : 'Đổi ảnh'}
                 </button>
-                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" />
+                <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void handleAvatarChange(e)}
+                />
             </div>
 
             {/* Form fields */}
@@ -1323,6 +1350,7 @@ function ToggleSwitch({
    ═══════════════════════════════════════════ */
 export default function SettingsPageClient({ profile }: { profile: UserProfile }) {
     const [activeTab, setActiveTab] = useState<SettingsTab>('personal');
+    const [professionalKey, setProfessionalKey] = useState(0);
 
     return (
         <div className="bg-[#f1f2f1] py-8">
@@ -1336,7 +1364,10 @@ export default function SettingsPageClient({ profile }: { profile: UserProfile }
                             <button
                                 key={item.key}
                                 type="button"
-                                onClick={() => setActiveTab(item.key)}
+                                onClick={() => {
+                                    if (item.key === 'professional') setProfessionalKey((k) => k + 1);
+                                    setActiveTab(item.key);
+                                }}
                                 className={`relative flex w-full items-center px-6 py-3.5 text-left text-[15px] transition ${
                                     activeTab === item.key
                                         ? 'bg-[#f6faf4] font-bold text-[#2e7d32]'
@@ -1357,7 +1388,7 @@ export default function SettingsPageClient({ profile }: { profile: UserProfile }
                 <main className="min-h-[600px] flex-1 px-10 py-8">
                     {activeTab === 'personal' && <PersonalInfoTab profile={profile} />}
                     {activeTab === 'password' && <PasswordTab />}
-                    {activeTab === 'professional' && <ProfessionalTab profile={profile} />}
+                    {activeTab === 'professional' && <ProfessionalTab key={professionalKey} profile={profile} />}
                     {activeTab === 'block' && <BlockManagementTab />}
                 </main>
             </div>

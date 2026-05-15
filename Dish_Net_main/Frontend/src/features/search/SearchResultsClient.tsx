@@ -14,6 +14,24 @@ const DEFAULT_FOOD_IMAGE = figmaFallbackAssets.feedDishImage;
 const DEFAULT_STORE_IMAGE = figmaFallbackAssets.storeImage;
 const DEFAULT_AVATAR = figmaFallbackAssets.reviewerAvatarA;
 
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|avi|mkv|webm)(\?|#|$)/i.test(url);
+}
+
+function MediaItem({ src, className }: { src: string; className: string }) {
+  if (isVideoUrl(src)) {
+    return (
+      <div className={`relative bg-black ${className.replace('w-full object-cover', '').trim()}`} style={{ width: '100%' }}>
+        <video src={src} muted playsInline preload="metadata" className={className} />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white text-xl">▶</div>
+        </div>
+      </div>
+    );
+  }
+  return <img src={src} alt="" className={className} />;
+}
+
 const VIETNAM_PROVINCES = [
   'An Giang', 'Bà Rịa - Vũng Tàu', 'Bạc Liêu', 'Bắc Giang', 'Bắc Kạn', 'Bắc Ninh',
   'Bến Tre', 'Bình Dương', 'Bình Định', 'Bình Phước', 'Bình Thuận', 'Cà Mau',
@@ -316,7 +334,9 @@ export default function SearchResultsClient({ query }: { query: string }) {
               <h2 className="mb-5 text-[22px] font-bold text-[#1f2937]">Bài viết / Review</h2>
               <div className="space-y-4">
                 {baiViet.map((item: any) => {
-                  const images: string[] = Array.isArray(item.tep_dinh_kem) ? item.tep_dinh_kem.filter(Boolean) : [];
+                  const images: string[] = Array.isArray(item.tep_dinh_kem)
+                    ? item.tep_dinh_kem.map((f: any) => (typeof f === 'string' ? f : f?.url)).filter(Boolean)
+                    : [];
                   const authorHref = item.id_nguoi_dang ? `/profile/${item.id_nguoi_dang}` : null;
                   return (
                     <article key={item.id} className="overflow-hidden rounded-[16px] bg-[#fff6ee] shadow-[0_4px_16px_rgba(0,0,0,0.07)]">
@@ -357,7 +377,7 @@ export default function SearchResultsClient({ query }: { query: string }) {
                               <div className={`mt-4 grid gap-2 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                                 {images.slice(0, 3).map((src: string, idx: number) => (
                                   <div key={idx} className="relative overflow-hidden rounded-[10px]">
-                                    <img src={src} alt="" className={`w-full object-cover ${images.length === 1 ? 'h-[200px]' : 'h-[120px]'}`} />
+                                    <MediaItem src={src} className={`w-full object-cover ${images.length === 1 ? 'h-[200px]' : 'h-[120px]'}`} />
                                     {idx === 2 && images.length > 3 ? (
                                       <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[15px] font-bold text-white">
                                         +{images.length - 3}
@@ -375,7 +395,7 @@ export default function SearchResultsClient({ query }: { query: string }) {
                               <div className={`mt-4 grid gap-2 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                                 {images.slice(0, 3).map((src: string, idx: number) => (
                                   <div key={idx} className="relative overflow-hidden rounded-[10px]">
-                                    <img src={src} alt="" className={`w-full object-cover ${images.length === 1 ? 'h-[200px]' : 'h-[120px]'}`} />
+                                    <MediaItem src={src} className={`w-full object-cover ${images.length === 1 ? 'h-[200px]' : 'h-[120px]'}`} />
                                     {idx === 2 && images.length > 3 ? (
                                       <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[15px] font-bold text-white">
                                         +{images.length - 3}

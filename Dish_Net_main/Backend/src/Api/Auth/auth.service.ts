@@ -13,6 +13,7 @@ import { randomBytes } from "crypto";
 import { NguoiDungEntity } from "./entities/nguoi-dung.entity";
 import { MaXacThucEntity } from "./entities/ma-xac-thuc.entity";
 import { PhienDangNhapEntity } from "./entities/phien-dang-nhap.entity";
+import { CuaHangEntity } from "../Admin/entities/cua-hang.entity";
 import {
   DangKyDto,
   XacNhanOtpDto,
@@ -37,6 +38,8 @@ export class AuthService {
     private readonly maXacThucRepo: Repository<MaXacThucEntity>,
     @InjectRepository(PhienDangNhapEntity)
     private readonly phienDangNhapRepo: Repository<PhienDangNhapEntity>,
+    @InjectRepository(CuaHangEntity)
+    private readonly cuaHangRepo: Repository<CuaHangEntity>,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
   ) {}
@@ -521,7 +524,17 @@ export class AuthService {
     }
 
     const { mat_khau_bam, ...thongTin } = nguoiDung;
-    return thongTin;
+
+    let id_cua_hang: number | null = null;
+    if (nguoiDung.la_chu_cua_hang) {
+      const cuaHang = await this.cuaHangRepo.findOne({
+        where: { id_chu_so_huu: userId },
+        select: ['id'],
+      });
+      id_cua_hang = cuaHang ? Number(cuaHang.id) : null;
+    }
+
+    return { ...thongTin, id_cua_hang };
   }
 
   private taoMaOtp(): string {

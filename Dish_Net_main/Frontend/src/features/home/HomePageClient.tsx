@@ -984,6 +984,7 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
     const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
     const [commentComposerOpen, setCommentComposerOpen] = useState(false);
     const [activeCommentStore, setActiveCommentStore] = useState('Nét Huế - Hàng Bông');
+    const [activeCommentCoverImage, setActiveCommentCoverImage] = useState<string | null>(null);
     const [activeCommentPostId, setActiveCommentPostId] = useState<number | null>(null);
     const [activeGalleryCard, setActiveGalleryCard] = useState<SpotlightCard | null>(null);
     const [activeDealCard, setActiveDealCard] = useState<SpotlightCard | null>(null);
@@ -1481,6 +1482,7 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                         canShare={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
                                         onComment={() => {
                                             setActiveCommentStore(post.storeName || post.author || 'Bài viết');
+                                            setActiveCommentCoverImage(post.storeId ? (post.storeAvatar ?? null) : (post.authorAvatar ?? null));
                                             setActiveCommentPostId(Number(post.id) || null);
                                             setCommentComposerOpen(false);
                                             setIsCommentModalOpen(true);
@@ -1519,7 +1521,7 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                                 setActionMessage('Không tìm thấy trang cá nhân của người dùng này.');
                                                 return;
                                             }
-                                            router.push(`/ranking/reviewer/${targetId}`);
+                                            router.push(`/profile/${targetId}`);
                                         }}
                                     onFollow={() => {
                                         const targetId = Number(post.authorId || 0);
@@ -1894,9 +1896,11 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                     setIsCommentModalOpen(false);
                     setCommentComposerOpen(false);
                     setActiveCommentStore('Nét Huế - Hàng Bông');
+                    setActiveCommentCoverImage(null);
                     setActiveCommentPostId(null);
                 }}
                 storeName={activeCommentStore}
+                coverImage={activeCommentCoverImage}
                 startComposerOpen={commentComposerOpen}
                 postId={activeCommentPostId}
                 onCommentPosted={(postId) => {

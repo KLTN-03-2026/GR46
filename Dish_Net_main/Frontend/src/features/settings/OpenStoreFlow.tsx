@@ -234,6 +234,7 @@ export default function OpenStoreFlow({
     const [formError, setFormError] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isValidatingForm, setIsValidatingForm] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<{
         ownerName?: string;
         cccd?: string;
@@ -587,15 +588,29 @@ export default function OpenStoreFlow({
                                 </p>
                             </div>
                             {cccdFiles.length >= 2 ? (
-                                <span className="rounded-[8px] bg-[#2e7d32] px-4 py-2 text-[13px] font-bold text-white">Đã xác minh</span>
-                            ) : null}
-                            <button
-                                type="button"
-                                onClick={() => cccdInputRef.current?.click()}
-                                className="rounded-[8px] bg-[#333] px-4 py-2 text-[13px] font-bold text-white transition hover:bg-[#555]"
-                            >
-                                {cccdFiles.length === 0 ? 'Chọn ảnh' : 'Tải thêm'}
-                            </button>
+                                <>
+                                    <span className="rounded-[8px] bg-[#2e7d32] px-4 py-2 text-[13px] font-bold text-white">Đã xác minh</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCccdFiles([]);
+                                            setCccdVerified(false);
+                                            setTimeout(() => cccdInputRef.current?.click(), 0);
+                                        }}
+                                        className="rounded-[8px] bg-[#333] px-4 py-2 text-[13px] font-bold text-white transition hover:bg-[#555]"
+                                    >
+                                        Chọn ảnh khác
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => cccdInputRef.current?.click()}
+                                    className="rounded-[8px] bg-[#333] px-4 py-2 text-[13px] font-bold text-white transition hover:bg-[#555]"
+                                >
+                                    {cccdFiles.length === 0 ? 'Chọn ảnh' : 'Tải thêm'}
+                                </button>
+                            )}
                             <input
                                 ref={cccdInputRef}
                                 type="file"
@@ -696,26 +711,27 @@ export default function OpenStoreFlow({
                 <div className="mt-8 flex justify-center">
                     <button
                         type="button"
-                        onClick={() => {
+                        disabled={isValidatingForm}
+                        onClick={async () => {
+                            if (isValidatingForm) return;
                             const errs = validateOpenStoreForm();
+                            const scrollMap: Record<string, string> = {
+                                ownerName: 'store-owner',
+                                cccd: 'store-cccd',
+                                storePhone: 'store-phone',
+                                storeAddress: 'store-address',
+                                storeName: 'store-name',
+                                storeContactPhone: 'store-contact',
+                                category: 'store-category',
+                                hoursFrom: 'store-hours-from',
+                                hoursTo: 'store-hours-to',
+                                businessAddress: 'store-biz-address',
+                            };
                             if (Object.keys(errs).length > 0) {
                                 setFieldErrors(errs);
                                 setFormError('Vui lòng kiểm tra lại các trường đang báo lỗi.');
-                                // Cuộn lên field lỗi đầu tiên
                                 const firstKey = Object.keys(errs)[0];
-                                const map: Record<string, string> = {
-                                    ownerName: 'store-owner',
-                                    cccd: 'store-cccd',
-                                    storePhone: 'store-phone',
-                                    storeAddress: 'store-address',
-                                    storeName: 'store-name',
-                                    storeContactPhone: 'store-contact',
-                                    category: 'store-category',
-                                    hoursFrom: 'store-hours-from',
-                                    hoursTo: 'store-hours-to',
-                                    businessAddress: 'store-biz-address',
-                                };
-                                const elId = map[firstKey];
+                                const elId = scrollMap[firstKey];
                                 if (elId) document.getElementById(elId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 return;
                             }
@@ -723,14 +739,28 @@ export default function OpenStoreFlow({
                                 setFormError('Vui lòng xác nhận đầy đủ các điều khoản.');
                                 return;
                             }
+                            setIsValidatingForm(true);
+                            try {
+                                const check = await userCommerceApi.kiemTraDiaChiKinhDoanh(businessAddress.trim());
+                                if (!check.kha_dung) {
+                                    setFieldErrors((prev) => ({ ...prev, businessAddress: check.thong_bao ?? 'Địa chỉ kinh doanh không hợp lệ.' }));
+                                    setFormError('Vui lòng kiểm tra lại các trường đang báo lỗi.');
+                                    document.getElementById('store-biz-address')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    return;
+                                }
+                            } catch {
+                                // bỏ qua lỗi mạng, để backend xử lý khi submit
+                            } finally {
+                                setIsValidatingForm(false);
+                            }
                             setFieldErrors({});
                             setFormError(null);
                             setStep('contract');
                         }}
-                        className="min-w-[160px] rounded-[10px] bg-[#2e7d32] px-10 py-3 text-[16px] font-bold text-white transition hover:bg-[#256b28]"
+                        className="min-w-[160px] rounded-[10px] bg-[#2e7d32] px-10 py-3 text-[16px] font-bold text-white transition hover:bg-[#256b28] disabled:opacity-60"
                         id="btn-submit-store"
                     >
-                        Gửi
+                        {isValidatingForm ? 'Đang kiểm tra...' : 'Gửi'}
                     </button>
                 </div>
                 {formError ? (

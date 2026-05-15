@@ -8,11 +8,19 @@ import { useRouter } from 'next/navigation';
 import { emitUserCartRefreshEvent } from '@/shared/cartEvents';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
+type CartTopping = {
+    id: number;
+    ten_topping: string;
+    gia: number;
+};
+
 type CartItem = {
     id: number;
     name: string;
     note?: string | null;
     price: number;
+    giaTopping: number;
+    toppings: CartTopping[];
     image: string;
     quantity: number;
     selected: boolean;
@@ -35,6 +43,8 @@ type CartApiItem = {
     ten_mon?: string;
     ghi_chu?: string | null;
     gia?: number;
+    gia_topping?: number;
+    toppings?: CartTopping[];
     hinh_anh?: string | null;
     so_luong?: number;
     duoc_chon?: boolean;
@@ -94,6 +104,8 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                             name: String(item.ten_mon ?? 'Món ăn'),
                             note: item.ghi_chu ?? null,
                             price: Number(item.gia ?? 0),
+                            giaTopping: Number(item.gia_topping ?? 0),
+                            toppings: Array.isArray(item.toppings) ? item.toppings : [],
                             image:
                                 String(item.hinh_anh ?? '').trim() ||
                                 'https://i.pravatar.cc/200',
@@ -152,7 +164,7 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                     sum +
                     group.items.reduce(
                         (acc, item) =>
-                            acc + (item.selected ? item.price * item.quantity : 0),
+                            acc + (item.selected ? (item.price + item.giaTopping) * item.quantity : 0),
                         0,
                     ),
                 0,
@@ -271,10 +283,19 @@ export default function CartModal({ isOpen, onClose }: CartModalProps) {
                                                 <Checkbox checked={item.selected} onChange={() => void updateItem(item.id, { duoc_chon: !item.selected })} />
                                                 <img src={item.image} alt={item.name} className="h-[86px] w-[86px] rounded-[16px] object-cover" />
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-3">
-                                                        <h3 className="truncate text-[18px] font-medium text-black">{item.name}</h3>
-                                                    </div>
-                                                    <p className="mt-2 text-[16px] font-semibold text-[#ff3b18]">{formatCurrency(item.price)}</p>
+                                                    <h3 className="truncate text-[18px] font-medium text-black">{item.name}</h3>
+                                                    {item.toppings.length > 0 && (
+                                                        <div className="mt-1 flex flex-wrap gap-1">
+                                                            {item.toppings.map((t) => (
+                                                                <span key={t.id} className="rounded-[6px] bg-[#fff4e5] px-2 py-0.5 text-[12px] text-[#c8600a]">
+                                                                    {t.ten_topping} +{formatCurrency(t.gia)}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <p className="mt-1.5 text-[16px] font-semibold text-[#ff3b18]">
+                                                        {formatCurrency(item.price + item.giaTopping)}
+                                                    </p>
                                                 </div>
 
                                                 <div className="flex items-center gap-3">

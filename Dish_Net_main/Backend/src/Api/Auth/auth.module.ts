@@ -6,6 +6,7 @@ import { AuthService } from "./auth.service";
 import { NguoiDungEntity } from "./entities/nguoi-dung.entity";
 import { MaXacThucEntity } from "./entities/ma-xac-thuc.entity";
 import { PhienDangNhapEntity } from "./entities/phien-dang-nhap.entity";
+import { CuaHangEntity } from "../Admin/entities/cua-hang.entity";
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PhienDangNhapEntity } from "./entities/phien-dang-nhap.entity";
       NguoiDungEntity,
       MaXacThucEntity,
       PhienDangNhapEntity,
+      CuaHangEntity,
     ]),
     JwtModule.register({}),
   ],

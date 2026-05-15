@@ -631,9 +631,11 @@ export class StoreOrderService {
 
     const counts: Record<string, number> = {
       cho_xac_nhan: 0,
+      da_xac_nhan: 0,
       dang_chuan_bi: 0,
       dang_giao: 0,
       da_giao: 0,
+      da_hoan_tien: 0,
       da_huy: 0,
       tra_hang: 0,
     };

@@ -158,6 +158,11 @@ export const userCommerceApi = {
       body: JSON.stringify(body),
     }),
 
+  kiemTraDiaChiKinhDoanh: (diaChiKinhDoanh: string) =>
+    request<{ kha_dung: boolean; thong_bao: string | null }>(
+      `/user/che-do-chuyen-nghiep/kiem-tra-dia-chi-kinh-doanh?dia_chi=${encodeURIComponent(diaChiKinhDoanh)}`,
+    ),
+
   dangKyMoCuaHang: (body: {
     chu_so_huu: string;
     so_cccd: string;
@@ -220,6 +225,7 @@ export const userCommerceApi = {
     id_mon_an: number;
     so_luong?: number;
     ghi_chu?: string;
+    toppings?: { id: number; ten_topping: string; gia: number }[];
   }) =>
     request('/user/gio-hang/items', {
       method: 'POST',
@@ -325,6 +331,17 @@ export const userCommerceApi = {
     request(`/user/nguoi-dung/${idNguoiDung}/bat-dau-tro-chuyen`, {
       method: 'POST',
     }),
+
+  toggleTheoDoi: (idNguoiDung: number) =>
+    request<{ dang_theo_doi: boolean; hanh_dong: string }>(
+      `/user/nguoi-dung/${idNguoiDung}/theo-doi`,
+      { method: 'POST' },
+    ),
+
+  layTrangThaiTuongTac: (idNguoiDung: number) =>
+    request<{ dang_theo_doi: boolean; da_chan: boolean; bi_chan_boi_doi_phuong: boolean }>(
+      `/user/nguoi-dung/${idNguoiDung}/tuong-tac`,
+    ),
 
   layDanhSachTroChuyen: (query?: {
     tim_kiem?: string;

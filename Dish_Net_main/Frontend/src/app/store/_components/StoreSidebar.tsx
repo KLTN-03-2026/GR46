@@ -3,14 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-type StoreTab = 'overview' | 'revenue' | 'menu' | 'orders' | 'feedback' | 'promotions';
+type StoreTab = 'overview' | 'revenue' | 'menu' | 'orders' | 'promotions';
 
 const SIDEBAR_ITEMS: { key: StoreTab; label: string; href: string }[] = [
     { key: 'overview', label: 'Tổng quan', href: '/store' },
     { key: 'revenue', label: 'Quản lý doanh thu', href: '/store/revenue' },
     { key: 'menu', label: 'Quản lý menu', href: '/store/menu' },
     { key: 'orders', label: 'Đơn đặt hàng', href: '/store/orders' },
-    { key: 'feedback', label: 'Quản lý phản hồi', href: '/store/feedback' },
     { key: 'promotions', label: 'Khuyến mãi', href: '/store/promotion' },
 ];
 

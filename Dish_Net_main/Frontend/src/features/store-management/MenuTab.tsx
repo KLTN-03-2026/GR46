@@ -256,10 +256,12 @@ function AddItemModal({
   danhMucList,
   onClose,
   onAdd,
+  onNewDanhMuc,
 }: {
   danhMucList: DanhMucItem[];
   onClose: () => void;
   onAdd: (item: MonAnItem) => void;
+  onNewDanhMuc?: (item: DanhMucItem) => void;
 }) {
   const [name, setName] = useState('');
   const [status, setStatus] = useState<ItemStatus>('dang_ban');
@@ -313,6 +315,7 @@ function AddItemModal({
       if (trimmedCat && !danhMucExactMatch) {
         const created = await storeMenuApi.taoDanhMuc({ ten_danh_muc: trimmedCat });
         resolvedDanhMucId = String(created.id);
+        onNewDanhMuc?.({ id: created.id, ten_danh_muc: trimmedCat, id_cua_hang: null, id_danh_muc_cha: null, thu_tu_hien_thi: 0, trang_thai: 'hieu_luc' });
       } else if (trimmedCat && danhMucExactMatch) {
         resolvedDanhMucId = String(danhMucExactMatch.id);
       }
@@ -331,7 +334,7 @@ function AddItemModal({
       });
       onAdd({
         id: result.id,
-        ma_mon: '',
+        ma_mon: result.ma_mon ?? '',
         ten_mon: name,
         mo_ta: desc || null,
         hinh_anh_dai_dien: imageUrl || null,
@@ -346,7 +349,14 @@ function AddItemModal({
         ten_danh_muc:
           danhMucList.find((d) => d.id.toString() === resolvedDanhMucId)?.ten_danh_muc ??
           (trimmedCat || null),
-        toppings: [],
+        toppings: toppings
+          .filter((t) => t.name.trim())
+          .map((t) => ({
+            id: 0,
+            ten_topping: t.name.trim(),
+            gia: Math.max(0, parseMoneyInput(t.price) ?? 0),
+            trang_thai: 'hieu_luc',
+          })),
       });
       onClose();
     } catch (error: unknown) {
@@ -877,6 +887,7 @@ export default function MenuTab() {
           danhMucList={danhMucList}
           onClose={() => setShowAdd(false)}
           onAdd={handleAddItem}
+          onNewDanhMuc={(item) => setDanhMucList((prev) => [...prev, item])}
         />
       )}
       {showSoldOut && <SoldOutModal hetMon={hetMonItems} onClose={() => setShowSoldOut(false)} />}

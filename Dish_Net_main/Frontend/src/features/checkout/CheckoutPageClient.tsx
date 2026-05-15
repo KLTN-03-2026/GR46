@@ -10,6 +10,12 @@ import { emitUserCartRefreshEvent } from '@/shared/cartEvents';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 import AddressPickerMap from '@/features/checkout/AddressPickerMap';
 
+type CheckoutTopping = {
+  id: number;
+  ten_topping: string;
+  gia: number;
+};
+
 type CheckoutItem = {
   id_gio_hang: number;
   id_mon_an: number;
@@ -17,6 +23,8 @@ type CheckoutItem = {
   hinh_anh: string | null;
   so_luong: number;
   don_gia: number;
+  toppings: CheckoutTopping[];
+  gia_topping: number;
   thanh_tien: number;
   ghi_chu: string | null;
 };
@@ -678,8 +686,17 @@ export default function CheckoutPageClient() {
                           {item.ten_mon}
                         </h3>
                         <p className="mt-1 text-[13px] text-[#6b7280]">
-                          {formatCurrency(item.don_gia)}
+                          {formatCurrency(item.don_gia + (item.gia_topping ?? 0))}
                         </p>
+                        {Array.isArray(item.toppings) && item.toppings.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {item.toppings.map((t) => (
+                              <span key={t.id} className="rounded-[5px] bg-[#fff4e5] px-1.5 py-0.5 text-[11px] text-[#c8600a]">
+                                {t.ten_topping} +{formatCurrency(t.gia)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {item.ghi_chu ? (
                           <p className="mt-1 text-[12px] text-[#6b7280]">
                             Ghi chú: {item.ghi_chu}
