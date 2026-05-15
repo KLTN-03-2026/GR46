@@ -97,6 +97,19 @@ export class StoreOrderController {
   }
 
   /**
+   * Cửa hàng chủ động đánh dấu đơn đã hoàn thành (đã giao).
+   * PATCH /api/store/don-hang/:maDonHang/hoan-thanh
+   */
+  @Patch(':maDonHang/hoan-thanh')
+  async hoanThanhDonHang(
+    @Req() req: AuthenticatedRequest,
+    @Param('maDonHang') maDonHang: string,
+  ) {
+    const userId = req.user!.sub;
+    return this.storeOrderService.hoanThanhDonHang(userId, maDonHang);
+  }
+
+  /**
    * PB27 - Gia hạn thời gian chuẩn bị
    * PATCH /api/store/don-hang/:maDonHang/gia-han
    */

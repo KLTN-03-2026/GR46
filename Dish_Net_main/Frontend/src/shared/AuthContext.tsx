@@ -13,6 +13,10 @@ type NguoiDung = {
   vai_tro: string;
   id_cua_hang?: number;
   ten_cua_hang?: string;
+  la_nha_sang_tao?: boolean;
+  la_chu_cua_hang?: boolean;
+  la_admin?: boolean;
+  trang_thai_kiem_tien_noi_dung?: string;
 };
 
 type AuthContextType = {
@@ -47,6 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         anh_dai_dien: data.anh_dai_dien,
         ten_dang_nhap: data.ten_dang_nhap,
         vai_tro: data.la_admin ? 'admin' : data.la_chu_cua_hang ? 'chu_cua_hang' : 'nguoi_dung',
+        la_nha_sang_tao: Boolean(data.la_nha_sang_tao),
+        la_chu_cua_hang: Boolean(data.la_chu_cua_hang),
+        la_admin: Boolean(data.la_admin),
+        trang_thai_kiem_tien_noi_dung: data.trang_thai_kiem_tien_noi_dung ?? undefined,
       });
     } catch {
       setNguoiDung(null);

@@ -440,14 +440,14 @@ export default function AdminDashboardPage() {
     {
       label: 'Tổng người dùng',
       value: formatNumber(overview?.tong_nguoi_dung ?? 0),
-      sub: 'Trong khoảng đã chọn',
+      sub: 'Toàn hệ thống',
       color: 'bg-blue-500',
       icon: 'users',
     },
     {
       label: 'Tổng cửa hàng',
       value: formatNumber(overview?.tong_cua_hang ?? 0),
-      sub: 'Trong khoảng đã chọn',
+      sub: 'Toàn hệ thống',
       color: 'bg-orange-500',
       icon: 'store',
     },
@@ -461,7 +461,7 @@ export default function AdminDashboardPage() {
     {
       label: 'Doanh thu',
       value: formatCurrency(overview?.doanh_thu ?? 0),
-      sub: 'Đơn đã giao',
+      sub: 'Đơn đã giao trong khoảng',
       color: 'bg-red-500',
       icon: 'revenue',
     },
@@ -547,7 +547,12 @@ export default function AdminDashboardPage() {
               <div key={store.id} className="flex items-center gap-3 border-b border-gray-100 py-3 last:border-none">
                 <RankingAvatar image={store.hinh_anh} label={store.ten_cua_hang} badge={store.stt} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-black">{store.ten_cua_hang}</p>
+                  <Link
+                    href={`/explore/store/${store.id}`}
+                    className="block truncate text-sm font-medium text-black transition-colors hover:text-green-700 hover:underline"
+                  >
+                    {store.ten_cua_hang}
+                  </Link>
                   <p className="text-xs text-gray-400">{formatNumber(store.tong_don_hang)} đơn</p>
                 </div>
               </div>

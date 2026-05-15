@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
@@ -44,11 +45,6 @@ type DishOption = {
   label: string;
   extraPrice: number;
 };
-
-const NOODLE_OPTIONS: DishOption[] = [
-  { id: 'bun-to', label: 'Sợi bún to', extraPrice: 0 },
-  { id: 'bun-nho', label: 'Sợi bún nhỏ', extraPrice: 0 },
-];
 
 const PACKAGING_OPTIONS: DishOption[] = [
   { id: 'dong-goi-thuong', label: 'Đựng túi bóng', extraPrice: 0 },
@@ -129,8 +125,8 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   const [activeMenuCategory, setActiveMenuCategory] = useState('tat-ca');
   const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
   const [dishQuantity, setDishQuantity] = useState(1);
-  const [selectedNoodle, setSelectedNoodle] = useState(NOODLE_OPTIONS[0].id);
   const [selectedPackaging, setSelectedPackaging] = useState(PACKAGING_OPTIONS[0].id);
+  const [selectedToppingIds, setSelectedToppingIds] = useState<Set<string>>(new Set());
   const [dishNote, setDishNote] = useState('');
   const [cartSummary, setCartSummary] = useState<StoreCartSummaryItem[]>([]);
   const [cartActionMessage, setCartActionMessage] = useState<string | null>(null);
@@ -232,9 +228,21 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   }, [loadStoreCartSummary]);
 
   const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
-  const selectedNoodlePrice = NOODLE_OPTIONS.find((option) => option.id === selectedNoodle)?.extraPrice ?? 0;
   const selectedPackagingPrice = PACKAGING_OPTIONS.find((option) => option.id === selectedPackaging)?.extraPrice ?? 0;
-  const selectedDishTotal = (selectedDishBasePrice + selectedNoodlePrice + selectedPackagingPrice) * dishQuantity;
+  const selectedToppingsPrice = selectedDish
+    ? selectedDish.toppings
+        .filter((t) => selectedToppingIds.has(t.id))
+        .reduce((sum, t) => sum + Number(t.gia ?? 0), 0)
+    : 0;
+  const selectedDishTotal = (selectedDishBasePrice + selectedPackagingPrice + selectedToppingsPrice) * dishQuantity;
+
+  const toggleTopping = (id: string) => {
+    setSelectedToppingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const resolveBackendMonAnId = async (item: MenuItem) => {
     const numericId = Number(item.id);
@@ -331,8 +339,8 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   const openDishDetail = (item: MenuItem) => {
     setSelectedDish(item);
     setDishQuantity(1);
-    setSelectedNoodle(NOODLE_OPTIONS[0].id);
     setSelectedPackaging(PACKAGING_OPTIONS[0].id);
+    setSelectedToppingIds(new Set());
     setDishNote('');
   };
 
@@ -408,9 +416,18 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
               />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
-                  <h1 className="min-w-0 flex-1 truncate text-[22px] font-bold leading-tight text-[#151737] sm:text-[28px] lg:text-[32px]">
-                    {store.title}
-                  </h1>
+                  {store.ownerId ? (
+                    <Link
+                      href={`/profile/${store.ownerId}`}
+                      className="min-w-0 flex-1 truncate text-[22px] font-bold leading-tight text-[#151737] hover:underline sm:text-[28px] lg:text-[32px]"
+                    >
+                      {store.title}
+                    </Link>
+                  ) : (
+                    <h1 className="min-w-0 flex-1 truncate text-[22px] font-bold leading-tight text-[#151737] sm:text-[28px] lg:text-[32px]">
+                      {store.title}
+                    </h1>
+                  )}
                   <span className="shrink-0 rounded-full bg-[#f4f8f3] px-3 py-1 text-[14px] font-semibold text-[#2f9e2f] sm:px-4 sm:text-[16px]">
                     {store.views}
                   </span>
@@ -594,26 +611,53 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <h3 className="text-[26px] font-semibold leading-tight text-black">{selectedDish.name}</h3>
-                    <p className="mt-1 text-[13px] text-[#616462]">Bún sợi to. Bún sợi nhỏ ghi chú giúp quán</p>
-                    <p className="text-[13px] text-[#616462]">400+ đã bán | 1 lượt thích</p>
+                    {selectedDish.note ? (
+                      <p className="mt-1 line-clamp-2 text-[13px] text-[#616462]">{selectedDish.note}</p>
+                    ) : null}
                   </div>
                   <p className="text-[28px] font-semibold leading-none text-[#f59e0b]">{selectedDish.price}</p>
                 </div>
 
                 <div className="mt-4 space-y-3">
                   <DishOptionGroup
-                    title="Sợi bún (Vui lòng chọn 1 trong 2)"
-                    options={NOODLE_OPTIONS}
-                    selected={selectedNoodle}
-                    onChange={setSelectedNoodle}
-                  />
-
-                  <DishOptionGroup
                     title="Cách đóng gói (Vui lòng chọn 1 trong 2)"
                     options={PACKAGING_OPTIONS}
                     selected={selectedPackaging}
                     onChange={setSelectedPackaging}
                   />
+
+                  {selectedDish.toppings.length > 0 && (
+                    <section className="overflow-hidden rounded-[10px] border border-[#ececec]">
+                      <h4 className="bg-[#fcf9e4] px-4 py-3 text-[15px] font-medium text-[#616462]">Topping (tùy chọn)</h4>
+                      <div className="divide-y divide-[#ececec] bg-white">
+                        {selectedDish.toppings.map((topping) => {
+                          const isActive = selectedToppingIds.has(topping.id);
+                          return (
+                            <button
+                              key={topping.id}
+                              type="button"
+                              onClick={() => toggleTopping(topping.id)}
+                              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#fafafa]"
+                            >
+                              <div>
+                                <p className="text-[16px] text-[#1f2937]">{topping.ten_topping}</p>
+                                <p className="text-sm text-[#6b7280]">{topping.gia === 0 ? 'Miễn phí' : `+ ${formatCurrency(topping.gia)}`}</p>
+                              </div>
+                              <span
+                                className={`flex h-6 w-6 items-center justify-center rounded-[7px] border text-xs font-bold ${
+                                  isActive
+                                    ? 'border-[#f59e0b] bg-[#f59e0b] text-white'
+                                    : 'border-[#c8ccd3] bg-white text-transparent'
+                                }`}
+                              >
+                                ✓
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
 
                   <section className="rounded-[10px] border border-[#ececec] p-3">
                     <label className="mb-2 flex items-center gap-2 text-[13px] font-medium text-[#616462]" htmlFor="dish-note-page">

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import Footer from '@/components/Footer/Footer';
 import Header from '@/components/Header/Header';
 import UserQuickActions from '@/components/UserQuickActions/UserQuickActions';
+import ChatboxBubble from '@/features/chatbox/ChatboxBubble';
 
 export default function PublicLayoutClient({
     children,
@@ -33,6 +34,7 @@ export default function PublicLayoutClient({
             </Suspense>
             <main className="flex flex-1 flex-col">{children}</main>
             <UserQuickActions />
+            <ChatboxBubble />
             <Footer />
         </>
     );

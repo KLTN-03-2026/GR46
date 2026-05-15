@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense, type ReactNode, useMemo, useRef, useState } from 'react';
+import { FormEvent, Suspense, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/shared/AuthContext';
 import { authApi } from '@/shared/authApi';
 
@@ -117,12 +117,6 @@ const vaiTroConfig: Record<string, { title: string; subtitle: string; descriptio
         description: 'Quản lý cửa hàng, menu, đơn hàng và doanh thu.',
         gradient: 'from-orange-300 to-red-400',
     },
-    nha_sang_tao: {
-        title: 'Tài khoản nhà sáng tạo',
-        subtitle: 'Nhà sáng tạo',
-        description: 'Tạo nội dung, kiếm tiền từ bài viết và review.',
-        gradient: 'from-blue-300 to-blue-500',
-    },
 };
 
 function LoginPageContent() {
@@ -133,11 +127,34 @@ function LoginPageContent() {
     const [form, setForm] = useState({ email: '', password: '' });
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
+
+    useEffect(() => {
+        try {
+            const savedEmail = localStorage.getItem('dishnet_remember_account');
+            const savedPassword = localStorage.getItem('dishnet_remember_password');
+            if (savedEmail) {
+                let decodedPassword = '';
+                if (savedPassword) {
+                    try {
+                        decodedPassword = atob(savedPassword);
+                    } catch {
+                        decodedPassword = '';
+                    }
+                }
+                setForm((prev) => ({ ...prev, email: savedEmail, password: decodedPassword }));
+                setRememberMe(true);
+            }
+        } catch {
+            // ignore (localStorage có thể không khả dụng)
+        }
+    }, []);
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [chonVaiTro, setChonVaiTro] = useState<{ email: string; danhSach: string[] } | null>(null);
     const [selectedVaiTro, setSelectedVaiTro] = useState('');
+    const [chuaXacThucEmail, setChuaXacThucEmail] = useState<string | null>(null);
+    const [resendingOtp, setResendingOtp] = useState(false);
     const googleButtonRef = useRef<HTMLDivElement | null>(null);
     const isGoogleInitializedRef = useRef(false);
 
@@ -167,6 +184,17 @@ function LoginPageContent() {
             }
 
             if (res.nguoi_dung) {
+                try {
+                    if (rememberMe) {
+                        localStorage.setItem('dishnet_remember_account', form.email.trim());
+                        localStorage.setItem('dishnet_remember_password', btoa(form.password));
+                    } else {
+                        localStorage.removeItem('dishnet_remember_account');
+                        localStorage.removeItem('dishnet_remember_password');
+                    }
+                } catch {
+                    // ignore
+                }
                 capNhatNguoiDung({
                     ...res.nguoi_dung,
                     vai_tro: res.vai_tro!,
@@ -175,9 +203,31 @@ function LoginPageContent() {
                 router.push(redirectTo || defaultRoute);
             }
         } catch (err: unknown) {
-            setServerError(getErrorMessage(err, 'Đăng nhập thất bại'));
+            const message = getErrorMessage(err, 'Đăng nhập thất bại');
+            if (/chưa được xác thực/i.test(message)) {
+                setChuaXacThucEmail(form.email.trim());
+                setServerError('');
+            } else {
+                setServerError(message);
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleXacNhanLaiOtp = async () => {
+        if (!chuaXacThucEmail || resendingOtp) return;
+        setResendingOtp(true);
+        try {
+            await authApi.guiLaiOtp({ email: chuaXacThucEmail, loai_xac_thuc: 'dang_ky' });
+            sessionStorage.setItem('register_email', chuaXacThucEmail);
+            setChuaXacThucEmail(null);
+            router.push('/register/verify');
+        } catch (err: unknown) {
+            setServerError(getErrorMessage(err, 'Gửi lại mã OTP thất bại'));
+            setChuaXacThucEmail(null);
+        } finally {
+            setResendingOtp(false);
         }
     };
 
@@ -190,6 +240,19 @@ function LoginPageContent() {
                 vai_tro: selectedVaiTro,
                 luu_dang_nhap: rememberMe,
             });
+            try {
+                if (rememberMe) {
+                    localStorage.setItem('dishnet_remember_account', chonVaiTro.email);
+                    if (form.password) {
+                        localStorage.setItem('dishnet_remember_password', btoa(form.password));
+                    }
+                } else {
+                    localStorage.removeItem('dishnet_remember_account');
+                    localStorage.removeItem('dishnet_remember_password');
+                }
+            } catch {
+                // ignore
+            }
             capNhatNguoiDung({ ...res.nguoi_dung, vai_tro: res.vai_tro });
             setChonVaiTro(null);
             const defaultRoute = res.vai_tro === 'admin' ? '/admin' : res.vai_tro === 'chu_cua_hang' ? '/store' : '/';
@@ -209,6 +272,17 @@ function LoginPageContent() {
                 credential,
                 luu_dang_nhap: rememberMe,
             });
+            try {
+                if (rememberMe && res.nguoi_dung?.email) {
+                    localStorage.setItem('dishnet_remember_account', res.nguoi_dung.email);
+                } else {
+                    localStorage.removeItem('dishnet_remember_account');
+                }
+                // Google login không có password nên luôn xóa password đã lưu
+                localStorage.removeItem('dishnet_remember_password');
+            } catch {
+                // ignore
+            }
             capNhatNguoiDung({ ...res.nguoi_dung, vai_tro: res.vai_tro });
             const defaultRoute = res.vai_tro === 'admin' ? '/admin' : res.vai_tro === 'chu_cua_hang' ? '/store' : '/';
             router.push(redirectTo || defaultRoute);
@@ -326,6 +400,43 @@ function LoginPageContent() {
                 </div>
             </div>
             <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={initGoogleSignIn} />
+
+            {chuaXacThucEmail && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#fff7e6]">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#faad14" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 9v4" />
+                                <path d="M12 17h.01" />
+                                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                            </svg>
+                        </div>
+                        <h2 className="mb-2 text-lg font-bold text-[#111827]">Tài khoản chưa xác thực</h2>
+                        <p className="mb-5 text-[14px] leading-6 text-[#6b7280]">
+                            Email <span className="font-semibold text-[#111827]">{chuaXacThucEmail}</span> chưa được xác thực OTP.
+                            Bạn có muốn nhận mã OTP mới để xác nhận lại không?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setChuaXacThucEmail(null)}
+                                disabled={resendingOtp}
+                                className="flex-1 h-[44px] rounded-[8px] border border-[#dfe3e8] text-[14px] font-semibold text-[#6b7280] transition hover:bg-[#f5f6f7] disabled:opacity-60"
+                            >
+                                Để sau
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleXacNhanLaiOtp}
+                                disabled={resendingOtp}
+                                className="flex-1 h-[44px] rounded-[8px] bg-[#61AF5E] text-[14px] font-bold text-white transition hover:bg-[#4e9a4b] disabled:opacity-60"
+                            >
+                                {resendingOtp ? 'Đang gửi...' : 'Xác nhận lại OTP'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {chonVaiTro && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

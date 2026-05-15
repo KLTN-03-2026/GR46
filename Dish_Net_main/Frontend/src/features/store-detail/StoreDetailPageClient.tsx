@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
@@ -37,11 +38,6 @@ type DishOption = {
     label: string;
     extraPrice: number;
 };
-
-const NOODLE_OPTIONS: DishOption[] = [
-    { id: 'bun-to', label: 'Sợi bún to', extraPrice: 0 },
-    { id: 'bun-nho', label: 'Sợi bún nhỏ', extraPrice: 0 },
-];
 
 const PACKAGING_OPTIONS: DishOption[] = [
     { id: 'dong-goi-thuong', label: 'Đựng túi bóng', extraPrice: 0 },
@@ -300,7 +296,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const [activeMenuCategory, setActiveMenuCategory] = useState('tat-ca');
     const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
     const [dishQuantity, setDishQuantity] = useState(1);
-    const [selectedNoodle, setSelectedNoodle] = useState(NOODLE_OPTIONS[0].id);
     const [selectedPackaging, setSelectedPackaging] = useState(PACKAGING_OPTIONS[0].id);
     const [dishNote, setDishNote] = useState('');
     const [cartSummary, setCartSummary] = useState<StoreCartSummaryItem[]>([]);
@@ -407,12 +402,10 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     }, [loadStoreCartSummary]);
 
     const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
-    const selectedNoodlePrice =
-        NOODLE_OPTIONS.find((option) => option.id === selectedNoodle)?.extraPrice ?? 0;
     const selectedPackagingPrice =
         PACKAGING_OPTIONS.find((option) => option.id === selectedPackaging)?.extraPrice ?? 0;
     const selectedDishTotal =
-        (selectedDishBasePrice + selectedNoodlePrice + selectedPackagingPrice) * dishQuantity;
+        (selectedDishBasePrice + selectedPackagingPrice) * dishQuantity;
 
     const resolveBackendMonAnId = async (item: MenuItem) => {
         const numericId = Number(item.id);
@@ -534,7 +527,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const openDishDetail = (item: MenuItem) => {
         setSelectedDish(item);
         setDishQuantity(1);
-        setSelectedNoodle(NOODLE_OPTIONS[0].id);
         setSelectedPackaging(PACKAGING_OPTIONS[0].id);
         setDishNote('');
     };
@@ -629,7 +621,16 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                         <div className="p-6 md:p-7">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <h1 className="text-[32px] font-bold leading-tight text-black md:text-[36px]">{store.title}</h1>
+                                    {store.ownerId ? (
+                                        <Link
+                                            href={`/profile/${store.ownerId}`}
+                                            className="text-[32px] font-bold leading-tight text-black hover:underline md:text-[36px]"
+                                        >
+                                            {store.title}
+                                        </Link>
+                                    ) : (
+                                        <h1 className="text-[32px] font-bold leading-tight text-black md:text-[36px]">{store.title}</h1>
+                                    )}
                                     <p className="mt-3 text-[16px] text-[#4b5563]">{store.subtitle}</p>
                                 </div>
                                 <div className="text-right">
@@ -817,7 +818,16 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f59e0b] text-[20px] font-bold text-white">
                                     {store.score}
                                 </div>
-                                <h2 className="text-[28px] font-bold leading-tight text-black">{store.title}</h2>
+                                {store.ownerId ? (
+                                    <Link
+                                        href={`/profile/${store.ownerId}`}
+                                        className="text-[28px] font-bold leading-tight text-black hover:underline"
+                                    >
+                                        {store.title}
+                                    </Link>
+                                ) : (
+                                    <h2 className="text-[28px] font-bold leading-tight text-black">{store.title}</h2>
+                                )}
                             </div>
                         </aside>
 
@@ -1085,20 +1095,14 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div>
                                         <h3 className="text-[26px] font-semibold leading-tight text-black">{selectedDish.name}</h3>
-                                        <p className="mt-1 text-[13px] text-[#616462]">Bún sợi to. Bún sợi nhỏ ghi chú giúp quán</p>
-                                        <p className="text-[13px] text-[#616462]">400+ đã bán | 1 lượt thích</p>
+                                        {selectedDish.note ? (
+                                            <p className="mt-1 line-clamp-2 text-[13px] text-[#616462]">{selectedDish.note}</p>
+                                        ) : null}
                                     </div>
                                     <p className="text-[28px] font-semibold leading-none text-[#f59e0b]">{selectedDish.price}</p>
                                 </div>
 
                                 <div className="mt-4 space-y-3">
-                                    <DishOptionGroup
-                                        title="Sợi bún (Vui lòng chọn 1 trong 2)"
-                                        options={NOODLE_OPTIONS}
-                                        selected={selectedNoodle}
-                                        onChange={setSelectedNoodle}
-                                    />
-
                                     <DishOptionGroup
                                         title="Cách đóng gói (Vui lòng chọn 1 trong 2)"
                                         options={PACKAGING_OPTIONS}

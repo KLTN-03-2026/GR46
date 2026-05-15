@@ -9,6 +9,12 @@ export type ReviewerProfilePost = {
   comments: string;
   shares: string;
   sends: string;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  isLiked: boolean;
+  dishLink?: string;
+  dishId?: number;
 };
 
 export type ReviewerVideo = {
@@ -98,16 +104,30 @@ export async function getReviewerContentPage(
     return { items, paging };
   }
 
-  const items: ReviewerProfilePost[] = rows.map((item) => ({
-    id: String(item.id),
-    date: item.ngay_dang ? new Date(String(item.ngay_dang)).toLocaleDateString('vi-VN') : '',
-    content: String(item.noi_dung ?? ''),
-    images: extractMediaUrls(item.tep_dinh_kem),
-    likes: String(item.tong_luot_thich ?? 0),
-    comments: String(item.tong_luot_binh_luan ?? 0),
-    shares: String(item.tong_luot_chia_se ?? 0),
-    sends: '0',
-  }));
+  const items: ReviewerProfilePost[] = rows.map((item) => {
+    const likeCount = Number(item.tong_luot_thich ?? 0);
+    const commentCount = Number(item.tong_luot_binh_luan ?? 0);
+    const shareCount = Number(item.tong_luot_chia_se ?? 0);
+    const linkMonRaw = typeof item.link_mon_an === 'string' ? item.link_mon_an.trim() : '';
+    const idMonAnRaw = item.id_mon_an != null ? Number(item.id_mon_an) : NaN;
+    const trangThaiTuongTac = (item.trang_thai_tuong_tac ?? {}) as Record<string, unknown>;
+    return {
+      id: String(item.id),
+      date: item.ngay_dang ? new Date(String(item.ngay_dang)).toLocaleDateString('vi-VN') : '',
+      content: String(item.noi_dung ?? ''),
+      images: extractMediaUrls(item.tep_dinh_kem),
+      likes: String(likeCount),
+      comments: String(commentCount),
+      shares: String(shareCount),
+      sends: '0',
+      likeCount,
+      commentCount,
+      shareCount,
+      isLiked: Boolean(trangThaiTuongTac.da_thich),
+      dishLink: linkMonRaw.length > 0 ? linkMonRaw : undefined,
+      dishId: Number.isFinite(idMonAnRaw) && idMonAnRaw > 0 ? idMonAnRaw : undefined,
+    };
+  });
   return { items, paging };
 }
 

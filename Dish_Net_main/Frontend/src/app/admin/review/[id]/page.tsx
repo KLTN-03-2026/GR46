@@ -282,42 +282,44 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div className="flex gap-3">
                   <span className="w-40 shrink-0 text-gray-400">Số bài đăng:</span>
-                  <span className="font-medium text-black">{request.thong_tin_kiem_tien_noi_dung.so_bai_dang ?? '—'}</span>
+                  <span className="font-medium text-black">{Number(request.thong_tin_kiem_tien_noi_dung.so_bai_dang ?? 0).toLocaleString('vi-VN')}</span>
                 </div>
                 <div className="flex gap-3">
                   <span className="w-40 shrink-0 text-gray-400">Số người theo dõi:</span>
-                  <span className="font-medium text-black">{request.thong_tin_kiem_tien_noi_dung.so_nguoi_theo_doi ?? '—'}</span>
+                  <span className="font-medium text-black">{Number(request.thong_tin_kiem_tien_noi_dung.so_nguoi_theo_doi ?? 0).toLocaleString('vi-VN')}</span>
                 </div>
               </div>
             </div>
           ) : null}
 
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="mb-4 border-b border-gray-100 pb-4 text-base font-bold text-black">Nội dung minh chứng</h2>
-            {attachments.length > 0 ? (
-              <div className="space-y-3">
-                {attachments.map((attachment) => (
-                  <a
-                    key={attachment.id}
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm transition-colors hover:border-green-200 hover:bg-green-50"
-                  >
-                    <div>
-                      <p className="font-semibold text-black">{attachment.ghi_chu || getAttachmentLabel(attachment.loai_tep)}</p>
-                      <p className="text-xs text-gray-400">
-                        {getAttachmentLabel(attachment.loai_tep)} • {formatDate(attachment.ngay_tao)}
-                      </p>
-                    </div>
-                    <span className="text-blue-500">Mở</span>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">Chưa có minh chứng đính kèm.</p>
-            )}
-          </div>
+          {requestInfo.loai_yeu_cau === 'mo_cua_hang' && (
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="mb-4 border-b border-gray-100 pb-4 text-base font-bold text-black">Nội dung minh chứng</h2>
+              {attachments.length > 0 ? (
+                <div className="space-y-3">
+                  {attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm transition-colors hover:border-green-200 hover:bg-green-50"
+                    >
+                      <div>
+                        <p className="font-semibold text-black">{attachment.ghi_chu || getAttachmentLabel(attachment.loai_tep)}</p>
+                        <p className="text-xs text-gray-400">
+                          {getAttachmentLabel(attachment.loai_tep)} • {formatDate(attachment.ngay_tao)}
+                        </p>
+                      </div>
+                      <span className="text-blue-500">Mở</span>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Chưa có minh chứng đính kèm.</p>
+              )}
+            </div>
+          )}
 
           <div className="rounded-2xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 border-b border-gray-100 pb-4 text-base font-bold text-black">Lịch sử kiểm duyệt</h2>

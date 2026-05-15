@@ -228,6 +228,59 @@ export class AdminPromotionService {
     return { message: "Tam dung khuyen mai thanh cong" };
   }
 
+  async kichHoat(id: number, actor: Actor, diaChiIp?: string | null) {
+    const khuyenMai = await this.khuyenMaiRepo.findOne({
+      where: { id, pham_vi_ap_dung: "he_thong" },
+    });
+
+    if (!khuyenMai) {
+      throw new NotFoundException("Khuyến mãi không tồn tại");
+    }
+
+    if (this.daKetThuc(khuyenMai.thoi_gian_ket_thuc)) {
+      khuyenMai.trang_thai = "da_ket_thuc";
+      await this.khuyenMaiRepo.save(khuyenMai);
+      throw new BadRequestException(
+        "Khuyến mãi đã kết thúc, không thể kích hoạt",
+      );
+    }
+
+    if (khuyenMai.trang_thai === "dang_dien_ra") {
+      throw new BadRequestException("Khuyến mãi đang diễn ra");
+    }
+
+    const duLieuCu = {
+      trang_thai: khuyenMai.trang_thai,
+      thoi_gian_bat_dau: khuyenMai.thoi_gian_bat_dau,
+    };
+
+    const now = new Date();
+    if (khuyenMai.thoi_gian_bat_dau > now) {
+      khuyenMai.thoi_gian_bat_dau = now;
+    }
+    khuyenMai.trang_thai = this.xacDinhTrangThai(
+      khuyenMai.thoi_gian_bat_dau,
+      khuyenMai.thoi_gian_ket_thuc,
+      false,
+    );
+
+    await this.khuyenMaiRepo.save(khuyenMai);
+
+    await this.ghiNhatKy(
+      "kich_hoat_khuyen_mai",
+      khuyenMai.id,
+      actor,
+      diaChiIp,
+      duLieuCu,
+      {
+        trang_thai: khuyenMai.trang_thai,
+        thoi_gian_bat_dau: khuyenMai.thoi_gian_bat_dau,
+      },
+    );
+
+    return { message: "Kích hoạt khuyến mãi thành công" };
+  }
+
   async xoa(id: number, actor: Actor, diaChiIp?: string | null) {
     const khuyenMai = await this.khuyenMaiRepo.findOne({
       where: { id, pham_vi_ap_dung: "he_thong" },

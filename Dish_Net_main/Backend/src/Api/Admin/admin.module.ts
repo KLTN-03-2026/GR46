@@ -34,6 +34,7 @@ import { ToppingEntity } from "./entities/topping.entity";
 import { DonHangEntity } from "./entities/don-hang.entity";
 import { DonHangChiTietEntity } from "./entities/don-hang-chi-tiet.entity";
 import { LichSuDonHangEntity } from "./entities/lich-su-don-hang.entity";
+import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entity";
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { LichSuDonHangEntity } from "./entities/lich-su-don-hang.entity";
       DonHangEntity,
       DonHangChiTietEntity,
       LichSuDonHangEntity,
+      QuanHeNguoiDungEntity,
     ]),
   ],
   controllers: [

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import CommentModal from '@/features/home/CommentModal';
 import { userContentApi } from '@/shared/userContentApi';
 import { userCommerceApi } from '@/shared/userCommerceApi';
+import { useAuth } from '@/shared/AuthContext';
 
 import type {
     EarningsItem,
@@ -527,6 +528,12 @@ function CreatePostModal({
         visibility: 'cong_khai' | 'ban_be';
     };
 }) {
+    const { nguoiDung } = useAuth();
+    // Chỉ "Nhà sáng tạo" (đã đăng ký kiếm tiền nội dung & được duyệt) mới được gắn link đặt món
+    const canAttachLink = Boolean(
+        nguoiDung?.la_nha_sang_tao ||
+        nguoiDung?.trang_thai_kiem_tien_noi_dung === 'da_duyet',
+    );
     const [isOrderLink, setIsOrderLink] = useState(Boolean(initialData?.monetize));
     const [content, setContent] = useState(initialData?.content ?? '');
     const [mediaUrls, setMediaUrls] = useState<string[]>(initialData?.mediaUrls ?? []);
@@ -549,8 +556,8 @@ function CreatePostModal({
             await onSubmit({
                 content: content.trim(),
                 mediaUrls,
-                monetize: isOrderLink,
-                dishLink: dishLink.trim(),
+                monetize: canAttachLink && isOrderLink,
+                dishLink: canAttachLink && isOrderLink ? dishLink.trim() : '',
                 visibility,
             });
             onClose();
@@ -660,25 +667,29 @@ function CreatePostModal({
                 </div>
 
                 <div className="flex items-center justify-between p-5 pt-8">
-                    <div className="flex items-center gap-3">
-                        <span className="font-bold text-[#1a6e14]">Đặt món</span>
-                        <button
-                            type="button"
-                            onClick={() => setIsOrderLink(!isOrderLink)}
-                            className={`relative flex h-[22px] w-10 items-center rounded-full transition-colors ${isOrderLink ? 'bg-[#1a6e14]' : 'bg-[#8a8d91]'}`}
-                        >
-                            <span className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow transition-transform ${isOrderLink ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                        </button>
-                        <input
-                            type="text"
-                            placeholder="Link món"
-                            value={dishLink}
-                            onChange={(event) => setDishLink(event.target.value)}
-                            className="h-[34px] w-[180px] rounded-[6px] border border-[#ced0d4] px-3 text-[14px] outline-none transition focus:border-[#1a6e14]"
-                            disabled={!isOrderLink}
-                            style={{ opacity: isOrderLink ? 1 : 0.6 }}
-                        />
-                    </div>
+                    {canAttachLink ? (
+                        <div className="flex items-center gap-3">
+                            <span className="font-bold text-[#1a6e14]">Đặt món</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsOrderLink(!isOrderLink)}
+                                className={`relative flex h-[22px] w-10 items-center rounded-full transition-colors ${isOrderLink ? 'bg-[#1a6e14]' : 'bg-[#8a8d91]'}`}
+                            >
+                                <span className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow transition-transform ${isOrderLink ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            </button>
+                            <input
+                                type="text"
+                                placeholder="Link món"
+                                value={dishLink}
+                                onChange={(event) => setDishLink(event.target.value)}
+                                className="h-[34px] w-[180px] rounded-[6px] border border-[#ced0d4] px-3 text-[14px] outline-none transition focus:border-[#1a6e14]"
+                                disabled={!isOrderLink}
+                                style={{ opacity: isOrderLink ? 1 : 0.6 }}
+                            />
+                        </div>
+                    ) : (
+                        <div />
+                    )}
 
                     <button
                         type="button"
@@ -764,6 +775,8 @@ function PostMenu({
 function PostCard({
     post,
     profile,
+    canShare = true,
+    canEditPost = true,
     onLike,
     onComment,
     onShare,
@@ -774,6 +787,8 @@ function PostCard({
 }: {
     post: UserProfile['posts'][number];
     profile: UserProfile;
+    canShare?: boolean;
+    canEditPost?: boolean;
     onLike: () => void;
     onComment: () => void;
     onShare: () => void;
@@ -784,6 +799,7 @@ function PostCard({
 }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const isRepost = post.type === 'repost' || Boolean(post.sharedPost);
+    const shareDisabled = isRepost || !canShare;
     const isVideoUrl = (url: string) => /\.(mp4|mov|avi|mkv)(\?|#|$)/i.test(url);
 
     return (
@@ -802,19 +818,21 @@ function PostCard({
                                 <span className="text-[11px] text-[#8c8c8c]">{post.date}</span>
                             </div>
                         </div>
-                        <PostMenu
-                            isOpen={isMenuOpen}
-                            onToggle={() => setIsMenuOpen((current) => !current)}
-                            onClose={() => setIsMenuOpen(false)}
-                            onEdit={() => {
-                                setIsMenuOpen(false);
-                                onEditPost();
-                            }}
-                            onDelete={() => {
-                                setIsMenuOpen(false);
-                                onDeletePost();
-                            }}
-                        />
+                        {canEditPost ? (
+                            <PostMenu
+                                isOpen={isMenuOpen}
+                                onToggle={() => setIsMenuOpen((current) => !current)}
+                                onClose={() => setIsMenuOpen(false)}
+                                onEdit={() => {
+                                    setIsMenuOpen(false);
+                                    onEditPost();
+                                }}
+                                onDelete={() => {
+                                    setIsMenuOpen(false);
+                                    onDeletePost();
+                                }}
+                            />
+                        ) : null}
                     </div>
 
                     <div className="mt-3 space-y-2 text-[13px] leading-7 text-[#535353]">
@@ -869,8 +887,9 @@ function PostCard({
                         <button
                             type="button"
                             onClick={onShare}
-                            disabled={isRepost}
-                            className={`transition ${isRepost ? 'cursor-not-allowed text-[#b5b5b5]' : 'hover:text-[#285e19]'}`}
+                            disabled={shareDisabled}
+                            title={!canShare && !isRepost ? 'Không thể đăng lại bài viết của chính mình' : undefined}
+                            className={`transition ${shareDisabled ? 'cursor-not-allowed text-[#b5b5b5]' : 'hover:text-[#285e19]'}`}
                         >
                             ↺ {post.shares}
                         </button>
@@ -893,10 +912,22 @@ function PostCard({
 }
 
 function VideoCard({ item }: { item: UserProfile['videos'][number] }) {
+    const url = String(item.image ?? '');
+    const isVideoFile = /\.(mp4|mov|avi|mkv|webm)(\?|#|$)/i.test(url);
     return (
         <article className="group relative overflow-hidden rounded-[12px]">
-            <img src={item.image} alt="" className="h-[210px] w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+            {isVideoFile ? (
+                <video
+                    src={url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="h-[210px] w-full bg-black object-cover transition duration-300 group-hover:scale-[1.03]"
+                />
+            ) : (
+                <img src={url} alt="" className="h-[210px] w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
             {item.pinned ? (
                 <span className="absolute left-3 top-3 rounded-[8px] bg-[#ff3356] px-3 py-1 text-[12px] font-bold text-white">Đã ghim</span>
             ) : null}
@@ -967,18 +998,85 @@ function OverviewMetric({
     );
 }
 
+function TurnOffMonetizationModal({
+    isSubmitting,
+    onClose,
+    onConfirm,
+}: {
+    isSubmitting: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+}) {
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+            <div
+                className="relative w-full max-w-[420px] rounded-[20px] bg-white p-7 text-center shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSubmitting}
+                    aria-label="Đóng"
+                    className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-[#6b7280] transition hover:bg-[#f3f4f6] disabled:opacity-50"
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#fff4e6]">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </div>
+
+                <h2 className="text-[20px] font-bold text-[#111827]">Tắt kiếm tiền?</h2>
+                <p className="mt-3 text-[14px] leading-6 text-[#6b7280]">
+                    Khi tắt kiếm tiền, bài viết này sẽ không còn hiển thị link món và bạn sẽ không nhận được doanh thu từ bài viết.
+                </p>
+
+                <div className="mt-6 flex gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={isSubmitting}
+                        className="flex-1 h-[44px] rounded-[10px] border border-[#d1d5db] text-[14px] font-semibold text-[#374151] transition hover:bg-[#f9fafb] disabled:opacity-60"
+                    >
+                        Hủy
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isSubmitting}
+                        className="flex-1 h-[44px] rounded-[10px] bg-[#dc2626] text-[14px] font-bold text-white transition hover:bg-[#b91c1c] disabled:opacity-60"
+                    >
+                        {isSubmitting ? 'Đang xử lý...' : 'Tắt kiếm tiền'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function EarningsCard({
     item,
     isMenuOpen,
     onToggleMenu,
     onCloseMenu,
     onOpenPost,
+    onEdit,
+    onTurnOffMonetization,
 }: {
     item: EarningsItem;
     isMenuOpen: boolean;
     onToggleMenu: () => void;
     onCloseMenu: () => void;
     onOpenPost: (postId: string) => void;
+    onEdit: (postId: string) => void;
+    onTurnOffMonetization: (postId: string) => void;
 }) {
     return (
         <article className="rounded-[14px] border border-[#dcd6cb] bg-white px-4 py-4 shadow-[0_6px_18px_rgba(0,0,0,0.04)]">
@@ -1002,12 +1100,26 @@ function EarningsCard({
                                     <MoreIcon />
                                 </button>
                                 {isMenuOpen ? (
-                                    <div className="absolute right-0 top-[calc(100%+6px)] z-10 w-[150px] rounded-[10px] border border-[#ebebeb] bg-white py-1 shadow-[0_16px_32px_rgba(0,0,0,0.12)]">
-                                        <button type="button" onClick={onCloseMenu} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#222] transition hover:bg-[#f7f7f7]">
+                                    <div className="absolute right-0 top-[calc(100%+6px)] z-10 w-[170px] rounded-[10px] border border-[#ebebeb] bg-white py-1 shadow-[0_16px_32px_rgba(0,0,0,0.12)]">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onCloseMenu();
+                                                onEdit(item.id);
+                                            }}
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#222] transition hover:bg-[#f7f7f7]"
+                                        >
                                             <span>✎</span>
                                             <span>Chỉnh sửa</span>
                                         </button>
-                                        <button type="button" onClick={onCloseMenu} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#222] transition hover:bg-[#f7f7f7]">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onCloseMenu();
+                                                onTurnOffMonetization(item.id);
+                                            }}
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#c62828] transition hover:bg-[#fff5f5]"
+                                        >
                                             <span>⌁</span>
                                             <span>Tắt kiếm tiền</span>
                                         </button>
@@ -1044,6 +1156,8 @@ function WithdrawModal({
     summary,
     amount,
     selectedAccountId,
+    errorMessage,
+    isSubmitting,
     onAmountChange,
     onAccountChange,
     onConfirm,
@@ -1053,6 +1167,8 @@ function WithdrawModal({
     summary: EarningsProfile['withdrawSummary'];
     amount: string;
     selectedAccountId: string;
+    errorMessage: string | null;
+    isSubmitting: boolean;
     onAmountChange: (value: string) => void;
     onAccountChange: (value: string) => void;
     onConfirm: () => void;
@@ -1124,18 +1240,26 @@ function WithdrawModal({
                         <p>Thời gian xử lý có thể mất từ 1 - 3 ngày làm việc.</p>
                     </div>
 
+                    {errorMessage ? (
+                        <div className="rounded-[12px] border border-[#f5c2c2] bg-[#fdecec] px-4 py-3 text-[13px] font-medium text-[#b42318]">
+                            {errorMessage}
+                        </div>
+                    ) : null}
+
                     <div className="grid gap-3 sm:grid-cols-2">
                         <button
                             type="button"
                             onClick={onConfirm}
-                            className="h-11 rounded-[12px] bg-[linear-gradient(90deg,#2ea57d_0%,#56c194_100%)] text-[16px] font-bold text-white transition hover:opacity-95"
+                            disabled={isSubmitting}
+                            className="h-11 rounded-[12px] bg-[linear-gradient(90deg,#2ea57d_0%,#56c194_100%)] text-[16px] font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            Xác nhận
+                            {isSubmitting ? 'Đang gửi…' : 'Xác nhận'}
                         </button>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="h-11 rounded-[12px] border border-[#d6d1c8] bg-white text-[16px] font-semibold text-[#303030] transition hover:bg-[#fafafa]"
+                            disabled={isSubmitting}
+                            className="h-11 rounded-[12px] border border-[#d6d1c8] bg-white text-[16px] font-semibold text-[#303030] transition hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             Hủy
                         </button>
@@ -1178,6 +1302,8 @@ function EarningsPanel({
     onSearchChange,
     onToggleMenu,
     onCloseMenu,
+    onEdit,
+    onTurnOffMonetization,
 }: {
     earnings: EarningsProfile;
     filter: EarningsFilter;
@@ -1188,6 +1314,8 @@ function EarningsPanel({
     onSearchChange: (value: string) => void;
     onToggleMenu: (value: string) => void;
     onCloseMenu: () => void;
+    onEdit: (postId: string) => void;
+    onTurnOffMonetization: (postId: string) => void;
 }) {
     const items = earnings.items.filter((item) => {
         const matchedFilter = filter === 'all' ? true : item.status === filter;
@@ -1251,6 +1379,8 @@ function EarningsPanel({
                         onToggleMenu={() => onToggleMenu(item.id)}
                         onCloseMenu={onCloseMenu}
                         onOpenPost={onOpenPost}
+                        onEdit={onEdit}
+                        onTurnOffMonetization={onTurnOffMonetization}
                     />
                 ))}
             </div>
@@ -1362,13 +1492,63 @@ export default function ProfilePageClient({
     profile,
     editHref = '/user/profile/edit',
     editLabel = 'Chỉnh sửa trang cá nhân',
+    canEdit = true,
 }: {
     profile: UserProfile;
     editHref?: string;
     editLabel?: string;
+    canEdit?: boolean;
 }) {
-    const hasEarnings = Boolean(profile.isMonetized && profile.earnings);
+    const hasEarnings = canEdit && Boolean(profile.isMonetized && profile.earnings);
+    const { nguoiDung, dangNhap } = useAuth();
     const [earnings, setEarnings] = useState(profile.earnings);
+    const [isFollowingTarget, setIsFollowingTarget] = useState<boolean>(
+        Boolean(profile.isFollowingByMe),
+    );
+    const [isFollowProcessing, setIsFollowProcessing] = useState(false);
+    const [isOpeningChat, setIsOpeningChat] = useState(false);
+
+    const handleToggleFollow = async () => {
+        if (!dangNhap) {
+            setActionMessage('Vui lòng đăng nhập để theo dõi người dùng.');
+            return;
+        }
+        const targetId = Number(profile.id);
+        if (!Number.isFinite(targetId) || targetId <= 0) return;
+        setIsFollowProcessing(true);
+        try {
+            const res = (await userContentApi.toggleTheoDoiNguoiDung(targetId)) as {
+                dang_theo_doi?: boolean;
+            };
+            setIsFollowingTarget(Boolean(res?.dang_theo_doi));
+        } catch (err) {
+            setActionMessage(
+                err instanceof Error ? err.message : 'Không thể cập nhật theo dõi',
+            );
+        } finally {
+            setIsFollowProcessing(false);
+        }
+    };
+
+    const handleOpenChat = async () => {
+        if (!dangNhap) {
+            setActionMessage('Vui lòng đăng nhập để nhắn tin.');
+            return;
+        }
+        const targetId = Number(profile.id);
+        if (!Number.isFinite(targetId) || targetId <= 0) return;
+        if (nguoiDung && Number(nguoiDung.id) === targetId) return;
+        setIsOpeningChat(true);
+        try {
+            await userCommerceApi.batDauTroChuyen(targetId);
+            window.location.href = '/messages';
+        } catch (err) {
+            setActionMessage(
+                err instanceof Error ? err.message : 'Không thể bắt đầu trò chuyện',
+            );
+            setIsOpeningChat(false);
+        }
+    };
 
     const [activeTab, setActiveTab] = useState<ProfileTab>(hasEarnings ? 'revenue' : 'posts');
     const [sortMode, setSortMode] = useState<SortMode>('latest');
@@ -1382,13 +1562,22 @@ export default function ProfilePageClient({
     const [isWithdrawSuccessOpen, setIsWithdrawSuccessOpen] = useState(false);
     const [withdrawAmount, setWithdrawAmount] = useState('1,000,000');
     const [selectedWithdrawAccountId, setSelectedWithdrawAccountId] = useState(profile.earnings?.withdrawalAccounts[0]?.id ?? '');
+    const [withdrawError, setWithdrawError] = useState<string | null>(null);
+    const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false);
     const [posts, setPosts] = useState(profile.posts);
+    const [videos, setVideos] = useState(profile.videos);
+    const [postsCount, setPostsCount] = useState<number>(() => {
+        const initial = Number(profile.postsCount);
+        return Number.isFinite(initial) ? initial : profile.posts.length;
+    });
     const [editingPost, setEditingPost] = useState<UserProfile['posts'][number] | null>(null);
     const [reposts, setReposts] = useState(profile.reposts ?? []);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [activeCommentPostId, setActiveCommentPostId] = useState<number | null>(null);
     const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
     const [activeRevenuePostId, setActiveRevenuePostId] = useState<number | null>(null);
+    const [turnOffMonetizationPostId, setTurnOffMonetizationPostId] = useState<string | null>(null);
+    const [isTurnOffMonetizationSubmitting, setIsTurnOffMonetizationSubmitting] = useState(false);
     const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
     const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
     const [isSharePopupOpen, setIsSharePopupOpen] = useState(false);
@@ -1403,7 +1592,7 @@ export default function ProfilePageClient({
 
     const visiblePosts = sortMode === 'latest' ? posts : [...posts].reverse();
     const visibleReposts = sortMode === 'latest' ? reposts : [...reposts].reverse();
-    const visibleVideos = profile.videos;
+    const visibleVideos = videos;
 
     const tabs = [
         { key: 'posts' as const, label: 'Bài viết', icon: <GridIcon /> },
@@ -1420,12 +1609,32 @@ export default function ProfilePageClient({
     const showSortControls = activeTab === 'posts' || activeTab === 'videos' || activeTab === 'reposts';
 
     const handleWithdrawConfirm = async () => {
+        if (isSubmittingWithdraw) return;
         const amountNumber = Number(String(withdrawAmount).replace(/[^\d]/g, ''));
         const accountId = Number(selectedWithdrawAccountId);
-        if (!Number.isFinite(accountId) || accountId <= 0) {
-            setActionMessage('Vui lòng chọn tài khoản nhận tiền hợp lệ');
+        const availableBalance = Number(
+            String(earnings?.withdrawSummary.availableBalance ?? '0').replace(/[^\d]/g, ''),
+        );
+
+        if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+            setWithdrawError('Vui lòng nhập số tiền hợp lệ');
             return;
         }
+        if (amountNumber < 100000) {
+            setWithdrawError('Số tiền tối thiểu để rút là 100,000đ');
+            return;
+        }
+        if (availableBalance > 0 && amountNumber > availableBalance) {
+            setWithdrawError('Số dư không đủ để thực hiện yêu cầu này');
+            return;
+        }
+        if (!Number.isFinite(accountId) || accountId <= 0) {
+            setWithdrawError('Vui lòng chọn tài khoản nhận tiền hợp lệ');
+            return;
+        }
+
+        setWithdrawError(null);
+        setIsSubmittingWithdraw(true);
         try {
             await userCommerceApi.taoYeuCauRutTien({
                 id_tai_khoan_rut_tien: accountId,
@@ -1435,7 +1644,9 @@ export default function ProfilePageClient({
             setIsWithdrawSuccessOpen(true);
             setActionMessage('Đã gửi yêu cầu rút tiền');
         } catch (e) {
-            setActionMessage(e instanceof Error ? e.message : 'Không thể gửi yêu cầu rút tiền');
+            setWithdrawError(e instanceof Error ? e.message : 'Không thể gửi yêu cầu rút tiền');
+        } finally {
+            setIsSubmittingWithdraw(false);
         }
     };
 
@@ -1484,7 +1695,7 @@ export default function ProfilePageClient({
                 tep_dinh_kem: mediaUrls,
                 muc_do_hien_thi: visibility,
                 bat_kiem_tien: monetize,
-                link_mon_an: monetize ? dishLink : undefined,
+                link_mon_an: dishLink ? dishLink : undefined,
             });
             setPosts((current) =>
                 current.map((item) =>
@@ -1511,25 +1722,42 @@ export default function ProfilePageClient({
             tep_dinh_kem: mediaUrls,
             muc_do_hien_thi: visibility,
             bat_kiem_tien: monetize,
-            link_mon_an: monetize ? dishLink : undefined,
+            link_mon_an: dishLink ? dishLink : undefined,
         });
+        const isVideo = created.loai_bai_viet === 'video';
+        const mediaUrlList = created.tep_dinh_kem?.map((item) => item.url) ?? [];
+
+        if (isVideo) {
+            const newVideo: UserProfile['videos'][number] = {
+                id: String(created.id),
+                image: mediaUrlList[0] ?? '',
+                views: String(created.tong_luot_thich ?? 0),
+            };
+            setVideos((current) => [newVideo, ...current]);
+            setPostsCount((current) => current + 1);
+            setActiveTab('videos');
+            setActionMessage('Đã đăng video');
+            return;
+        }
+
         const newPost: ProfilePost = {
             id: String(created.id),
             date: created.ngay_dang
                 ? new Date(created.ngay_dang).toLocaleDateString('vi-VN')
                 : new Date().toLocaleDateString('vi-VN'),
             content: created.noi_dung ?? '',
-            images: created.tep_dinh_kem?.map((item) => item.url) ?? [],
+            images: mediaUrlList,
             likes: String(created.tong_luot_thich ?? 0),
             comments: String(created.tong_luot_binh_luan ?? 0),
             shares: String(created.tong_luot_chia_se ?? 0),
             sends: '0',
-            type: created.loai_bai_viet === 'video' ? 'video' : 'bai_viet',
+            type: 'bai_viet',
             visibility: created.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
             monetized: Boolean(created.bat_kiem_tien),
             dishLink: created.link_mon_an ?? null,
         };
         setPosts((current) => [newPost, ...current]);
+        setPostsCount((current) => current + 1);
         setActionMessage('Đã đăng bài viết');
     };
 
@@ -1537,6 +1765,57 @@ export default function ProfilePageClient({
         const id = Number(postId);
         if (!Number.isFinite(id)) return;
         setActiveRevenuePostId(id);
+    };
+
+    const handleEditEarningPost = (postId: string) => {
+        const post = posts.find((item) => String(item.id) === String(postId));
+        if (!post) {
+            setActionMessage('Không tìm thấy bài viết để chỉnh sửa');
+            return;
+        }
+        setEditingPost(post);
+        setIsCreatePostModalOpen(true);
+    };
+
+    const handleConfirmTurnOffMonetization = async () => {
+        const postId = turnOffMonetizationPostId;
+        if (!postId) return;
+        const id = Number(postId);
+        if (!Number.isFinite(id)) {
+            setTurnOffMonetizationPostId(null);
+            return;
+        }
+        setIsTurnOffMonetizationSubmitting(true);
+        try {
+            const updated = await userContentApi.capNhatBaiViet(id, {
+                bat_kiem_tien: false,
+            });
+            setPosts((current) =>
+                current.map((item) =>
+                    Number(item.id) === id
+                        ? {
+                            ...item,
+                            monetized: Boolean(updated.bat_kiem_tien),
+                            dishLink: updated.link_mon_an ?? null,
+                        }
+                        : item,
+                ),
+            );
+            setEarnings((current) =>
+                current
+                    ? {
+                        ...current,
+                        items: current.items.filter((item) => String(item.id) !== String(postId)),
+                    }
+                    : current,
+            );
+            setActionMessage('Đã tắt kiếm tiền cho bài viết');
+            setTurnOffMonetizationPostId(null);
+        } catch (error) {
+            setActionMessage(error instanceof Error ? error.message : 'Không thể tắt kiếm tiền');
+        } finally {
+            setIsTurnOffMonetizationSubmitting(false);
+        }
     };
 
     return (
@@ -1576,7 +1855,7 @@ export default function ProfilePageClient({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-x-7 gap-y-2 text-[14px] text-[#222]">
-                                    <span><strong className="font-semibold">{profile.postsCount}</strong> bài viết</span>
+                                    <span><strong className="font-semibold">{postsCount}</strong> bài viết</span>
                                     <button
                                         type="button"
                                         onClick={() => setIsFollowersModalOpen(true)}
@@ -1594,17 +1873,49 @@ export default function ProfilePageClient({
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    <Link
-                                        href={editHref}
-                                        id="btn-edit-profile"
-                                        className="flex h-10 flex-1 items-center justify-center rounded-[10px] bg-black px-4 text-[14px] font-bold text-white transition hover:bg-[#262626]"
-                                    >
-                                        {editLabel}
-                                    </Link>
+                                    {canEdit ? (
+                                        <Link
+                                            href={editHref}
+                                            id="btn-edit-profile"
+                                            className="flex h-10 flex-1 items-center justify-center rounded-[10px] bg-black px-4 text-[14px] font-bold text-white transition hover:bg-[#262626]"
+                                        >
+                                            {editLabel}
+                                        </Link>
+                                    ) : (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={handleToggleFollow}
+                                                disabled={isFollowProcessing}
+                                                className={`flex h-10 flex-1 items-center justify-center rounded-[10px] px-4 text-[14px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
+                                                    isFollowingTarget
+                                                        ? 'border border-[#258f22] bg-[#e8f4e7] text-[#1f771d] hover:bg-[#dcf0db]'
+                                                        : 'bg-[#2e7d32] text-white hover:bg-[#256b28]'
+                                                }`}
+                                            >
+                                                {isFollowProcessing
+                                                    ? 'Đang xử lý…'
+                                                    : isFollowingTarget
+                                                        ? 'Đang theo dõi'
+                                                        : 'Follow +'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenChat}
+                                                disabled={isOpeningChat}
+                                                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] border border-[#1f89cf] bg-white px-4 text-[14px] font-bold text-[#1f89cf] transition hover:bg-[#eaf4fb] disabled:cursor-wait disabled:opacity-60"
+                                            >
+                                                {isOpeningChat ? 'Đang mở…' : '💬 Nhắn tin'}
+                                            </button>
+                                        </>
+                                    )}
                                     {hasEarnings ? (
                                         <button
                                             type="button"
-                                            onClick={() => setIsWithdrawModalOpen(true)}
+                                            onClick={() => {
+                                                setWithdrawError(null);
+                                                setIsWithdrawModalOpen(true);
+                                            }}
                                             className="flex h-10 flex-1 items-center justify-center rounded-[10px] bg-[#1f89cf] px-4 text-[14px] font-bold text-white transition hover:bg-[#1777b5]"
                                         >
                                             Rút tiền
@@ -1688,10 +1999,12 @@ export default function ProfilePageClient({
                     </div>
                 </div>
 
-                {activeTab === 'posts' ? <CreatePostBox profile={profile} onClick={() => {
-                    setEditingPost(null);
-                    setIsCreatePostModalOpen(true);
-                }} /> : null}
+                {activeTab === 'posts' && canEdit ? (
+                    <CreatePostBox profile={profile} onClick={() => {
+                        setEditingPost(null);
+                        setIsCreatePostModalOpen(true);
+                    }} />
+                ) : null}
 
                 {activeTab === 'posts' ? (
                     <div>
@@ -1701,6 +2014,8 @@ export default function ProfilePageClient({
                                     key={post.id}
                                     post={post}
                                     profile={profile}
+                                    canShare={!canEdit}
+                                    canEditPost={canEdit}
                                     onLike={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
@@ -1811,6 +2126,7 @@ export default function ProfilePageClient({
                                             .xoaBaiViet(id)
                                             .then(() => {
                                                 setPosts((current) => current.filter((item) => Number(item.id) !== id));
+                                                setPostsCount((current) => Math.max(0, current - 1));
                                                 setActionMessage('Đã xóa bài viết');
                                             })
                                             .catch((e) =>
@@ -1853,6 +2169,8 @@ export default function ProfilePageClient({
                                     key={post.id}
                                     post={post}
                                     profile={profile}
+                                    canShare={!canEdit}
+                                    canEditPost={canEdit}
                                     onLike={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
@@ -2006,6 +2324,8 @@ export default function ProfilePageClient({
                         onSearchChange={setEarningsSearch}
                         onToggleMenu={(value) => setOpenEarningMenuId((current) => current === value ? null : value)}
                         onCloseMenu={() => setOpenEarningMenuId(null)}
+                        onEdit={handleEditEarningPost}
+                        onTurnOffMonetization={(postId) => setTurnOffMonetizationPostId(postId)}
                     />
                 ) : null}
 
@@ -2020,7 +2340,7 @@ export default function ProfilePageClient({
                 ) : null}
             </section>
 
-                {isCreatePostModalOpen ? (
+                {isCreatePostModalOpen && canEdit ? (
                     <CreatePostModal
                         profile={profile}
                         onClose={() => {
@@ -2061,10 +2381,21 @@ export default function ProfilePageClient({
                     summary={earnings.withdrawSummary}
                     amount={withdrawAmount}
                     selectedAccountId={selectedWithdrawAccountId}
-                    onAmountChange={setWithdrawAmount}
-                    onAccountChange={setSelectedWithdrawAccountId}
+                    errorMessage={withdrawError}
+                    isSubmitting={isSubmittingWithdraw}
+                    onAmountChange={(value) => {
+                        setWithdrawAmount(value);
+                        if (withdrawError) setWithdrawError(null);
+                    }}
+                    onAccountChange={(value) => {
+                        setSelectedWithdrawAccountId(value);
+                        if (withdrawError) setWithdrawError(null);
+                    }}
                     onConfirm={handleWithdrawConfirm}
-                    onClose={() => setIsWithdrawModalOpen(false)}
+                    onClose={() => {
+                        setIsWithdrawModalOpen(false);
+                        setWithdrawError(null);
+                    }}
                 />
             ) : null}
 
@@ -2079,6 +2410,16 @@ export default function ProfilePageClient({
                 postId={activeRevenuePostId}
                 onClose={() => setActiveRevenuePostId(null)}
             />
+
+            {turnOffMonetizationPostId ? (
+                <TurnOffMonetizationModal
+                    isSubmitting={isTurnOffMonetizationSubmitting}
+                    onClose={() => {
+                        if (!isTurnOffMonetizationSubmitting) setTurnOffMonetizationPostId(null);
+                    }}
+                    onConfirm={() => void handleConfirmTurnOffMonetization()}
+                />
+            ) : null}
 
             {isFollowersModalOpen ? (
                 <FollowersModal onClose={() => setIsFollowersModalOpen(false)} />

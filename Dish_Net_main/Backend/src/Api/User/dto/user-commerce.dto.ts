@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -235,6 +236,9 @@ export class DatDonHangDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^0\d{9}$/, {
+    message: 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0',
+  })
   so_dien_thoai_nhan: string;
 
   @IsString()

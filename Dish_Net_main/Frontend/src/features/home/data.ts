@@ -175,9 +175,10 @@ export async function getBangTinPage(trang: number, soLuong = 10) {
 
 export async function getHomePageData(): Promise<HomePageData> {
     try {
-        const [{ feedPayload, spotlightCards, feedPosts, menuCategories, menuItems }, miniPayload] = await Promise.all([
+        const [{ feedPayload, spotlightCards, feedPosts, menuCategories, menuItems }, miniPayload, khamPhaPayload] = await Promise.all([
             getBangTinPage(1, 10),
             userContentApi.layBangXepHangMini({ so_luong: 6 }) as Promise<any>,
+            userContentApi.layTrangKhamPha() as Promise<any>,
         ]);
         const deals = Array.isArray(feedPayload?.deal_hom_nay) ? feedPayload.deal_hom_nay : [];
 
@@ -186,8 +187,80 @@ export async function getHomePageData(): Promise<HomePageData> {
 
         const firstDeal = deals[0];
 
+        const dealStoreMap = new Map<number, any>();
+        for (const deal of deals) {
+            const storeId = deal?.cua_hang?.id != null ? Number(deal.cua_hang.id) : null;
+            if (storeId && !dealStoreMap.has(storeId)) dealStoreMap.set(storeId, deal);
+        }
+
+        const buildDealText = (deal: any | undefined): string | undefined => {
+            if (!deal) return undefined;
+            const giamToiDa = Number(deal?.mon_goi_y?.so_tien_giam ?? 0);
+            if (giamToiDa >= 1000) {
+                return `Giảm đến ${Math.round(giamToiDa / 1000)}k`;
+            }
+            return 'Giảm món';
+        };
+
+        const featuredFromDeals = deals
+            .filter((deal: any) => deal?.mon_goi_y?.hinh_anh || deal?.cua_hang?.anh_dai_dien)
+            .map((deal: any, index: number) => ({
+                id: String(deal?.mon_goi_y?.id ?? deal?.id ?? `featured-${index}`),
+                image: String(deal?.mon_goi_y?.hinh_anh || deal?.cua_hang?.anh_dai_dien),
+                name: String(deal?.cua_hang?.ten_cua_hang ?? deal?.mon_goi_y?.ten_mon ?? 'Cửa hàng'),
+                address: deal?.cua_hang?.dia_chi_kinh_doanh ? String(deal.cua_hang.dia_chi_kinh_doanh) : undefined,
+                dealText: buildDealText(deal),
+                storeId: deal?.cua_hang?.id != null ? Number(deal.cua_hang.id) : undefined,
+                dishId: deal?.mon_goi_y?.id != null ? Number(deal.mon_goi_y.id) : undefined,
+            }));
+
+        const quanGanBan = Array.isArray(khamPhaPayload?.quan_an_gan_ban) ? khamPhaPayload.quan_an_gan_ban : [];
+        const featuredFromQuanGanBan = quanGanBan
+            .filter((q: any) => q?.hinh_anh_mon)
+            .map((q: any) => {
+                const storeId = q.id != null ? Number(q.id) : undefined;
+                const matchedDeal = storeId ? dealStoreMap.get(storeId) : undefined;
+                return {
+                    id: `store-${storeId}`,
+                    image: String(q.hinh_anh_mon),
+                    name: String(q.ten_quan ?? 'Cửa hàng'),
+                    address: q.dia_chi ? String(q.dia_chi) : undefined,
+                    dealText: buildDealText(matchedDeal),
+                    storeId,
+                };
+            });
+
+        const goiY = Array.isArray(khamPhaPayload?.mon_goi_y_cho_ban) ? khamPhaPayload.mon_goi_y_cho_ban : [];
+        const featuredFromGoiY = goiY
+            .filter((mon: any) => mon?.hinh_anh)
+            .map((mon: any) => ({
+                id: `goi-y-${Number(mon.id)}`,
+                image: String(mon.hinh_anh),
+                name: String(mon.ten_mon ?? 'Món gợi ý'),
+                storeId: mon.id_cua_hang != null ? Number(mon.id_cua_hang) : undefined,
+                dishId: mon.id != null ? Number(mon.id) : undefined,
+            }));
+
+        const seenStoreIds = new Set<number>();
+        const featuredDishes = [
+            ...featuredFromDeals,
+            ...featuredFromQuanGanBan,
+            ...featuredFromGoiY,
+        ]
+            .filter((item) => {
+                if (item.storeId == null) return true;
+                if (seenStoreIds.has(item.storeId)) return false;
+                seenStoreIds.add(item.storeId);
+                return true;
+            })
+            .slice(0, 6);
+
         return {
             ...homePageBaseData,
+            hero: {
+                ...homePageBaseData.hero,
+                featuredDishes,
+            },
             rankings: {
                 stores: stores.map((item: any) => ({
                     rank: String(item.xep_hang),

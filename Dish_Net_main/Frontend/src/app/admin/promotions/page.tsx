@@ -312,6 +312,19 @@ export default function PromotionsPage() {
     }
   };
 
+  const handleActivate = async (id: number) => {
+    setSubmitting(true);
+    try {
+      await adminPromotionApi.kichHoat(id);
+      toast.success('Đã kích hoạt khuyến mãi');
+      await loadPromotionList();
+    } catch (submitError: unknown) {
+      toast.error(getErrorMessage(submitError, 'Không thể kích hoạt khuyến mãi'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const renderFormModal = (
     title: string,
     submitLabel: string,
@@ -591,13 +604,23 @@ export default function PromotionsPage() {
                   Sửa
                 </button>
 
-                {promo.trang_thai !== 'da_ket_thuc' && promo.trang_thai !== 'tam_dung' ? (
+                {promo.trang_thai === 'dang_dien_ra' ? (
                   <button
                     onClick={() => void handlePause(promo.id)}
                     disabled={submitting}
                     className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Tạm dừng
+                  </button>
+                ) : null}
+
+                {promo.trang_thai === 'sap_dien_ra' || promo.trang_thai === 'tam_dung' ? (
+                  <button
+                    onClick={() => void handleActivate(promo.id)}
+                    disabled={submitting}
+                    className="px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Kích hoạt
                   </button>
                 ) : null}
 

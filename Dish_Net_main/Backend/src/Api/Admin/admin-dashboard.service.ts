@@ -113,20 +113,14 @@ export class AdminDashboardService {
         this.nguoiDungRepo
           .createQueryBuilder("nd")
           .where("nd.la_admin = :laAdmin", { laAdmin: false })
-          .andWhere("nd.ngay_tao BETWEEN :tuNgay AND :denNgay", {
-            tuNgay: range.tu_ngay,
-            denNgay: range.den_ngay,
-          })
           .getCount(),
-        this.cuaHangRepo
-          .createQueryBuilder("ch")
-          .where("ch.ngay_tao BETWEEN :tuNgay AND :denNgay", {
-            tuNgay: range.tu_ngay,
-            denNgay: range.den_ngay,
-          })
-          .getCount(),
+        this.cuaHangRepo.createQueryBuilder("ch").getCount(),
         this.donHangRepo
           .createQueryBuilder("dh")
+          .where("dh.thoi_gian_dat BETWEEN :tuNgay AND :denNgay", {
+            tuNgay: range.tu_ngay,
+            denNgay: range.den_ngay,
+          })
           .getCount(),
         this.donHangRepo
           .createQueryBuilder("dh")

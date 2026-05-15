@@ -84,6 +84,21 @@ export class AdminPromotionController {
     );
   }
 
+  @Patch(":id/kich-hoat")
+  async kichHoatKhuyenMai(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.adminPromotionService.kichHoat(
+      id,
+      {
+        id: req.user?.sub ?? 0,
+        email: req.user?.email ?? "admin",
+      },
+      req.ip,
+    );
+  }
+
   @Delete(":id")
   async xoaKhuyenMai(
     @Param("id", ParseIntPipe) id: number,

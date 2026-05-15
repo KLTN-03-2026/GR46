@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AdminTable, { Column } from '@/components/Admin/AdminTable';
 import Pagination from '@/components/Admin/Pagination';
 import ViewButton from '@/components/Admin/ViewButton';
@@ -296,6 +297,7 @@ function RankingCard({
     stt: number;
     ten: string;
     phu_de: string;
+    href?: string;
   }>;
 }) {
   return (
@@ -313,7 +315,16 @@ function RankingCard({
                 {item.stt}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-semibold text-black">{item.ten}</p>
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className="truncate text-base font-semibold text-black transition-colors hover:text-green-700 hover:underline"
+                  >
+                    {item.ten}
+                  </Link>
+                ) : (
+                  <p className="truncate text-base font-semibold text-black">{item.ten}</p>
+                )}
                 <p className="mt-1 text-sm text-gray-500">{item.phu_de}</p>
               </div>
             </div>
@@ -505,6 +516,7 @@ export default function RevenuePage() {
             stt: item.stt,
             ten: item.ten_cua_hang,
             phu_de: `${item.tong_don_hang.toLocaleString('vi-VN')} đơn hàng`,
+            href: item.id ? `/explore/store/${item.id}` : undefined,
           }))}
         />
         <RankingCard
@@ -515,6 +527,7 @@ export default function RevenuePage() {
             stt: item.stt,
             ten: item.ten_hien_thi,
             phu_de: formatCurrency(item.doanh_thu_tao_ra),
+            href: item.id ? `/profile/${item.id}` : undefined,
           }))}
         />
       </div>

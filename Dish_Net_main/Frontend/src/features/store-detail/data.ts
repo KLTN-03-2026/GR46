@@ -1,6 +1,12 @@
 import { figmaFallbackAssets } from '@/shared/assets/figmaFallback';
 import { userContentApi } from '@/shared/userContentApi';
 
+export type StoreDetailMenuTopping = {
+    id: string;
+    ten_topping: string;
+    gia: number;
+};
+
 export type StoreDetailMenuItem = {
     id: string;
     categoryId: string;
@@ -8,6 +14,7 @@ export type StoreDetailMenuItem = {
     note: string;
     price: string;
     image: string;
+    toppings: StoreDetailMenuTopping[];
 };
 
 export type StoreDetailMenuCategory = {
@@ -41,6 +48,7 @@ export type StoreDetailComment = {
 
 export type StoreDetailData = {
     id: string;
+    ownerId: number | null;
     title: string;
     subtitle: string;
     coverImage: string;
@@ -183,6 +191,15 @@ export async function getStoreDetailById(id: string): Promise<StoreDetailData | 
         note: String(item.mo_ta ?? ''),
         price: formatCurrency(Number(item.gia_ban ?? 0)),
         image: String(item.hinh_anh ?? fallbackImage),
+        toppings: Array.isArray(item.toppings)
+            ? item.toppings
+                  .filter((tp: any) => tp && (tp.trang_thai == null || tp.trang_thai === 'hieu_luc'))
+                  .map((tp: any) => ({
+                      id: String(tp.id ?? ''),
+                      ten_topping: String(tp.ten_topping ?? ''),
+                      gia: Number(tp.gia ?? 0),
+                  }))
+            : [],
     }));
 
     const dishIds = Array.from(
@@ -262,6 +279,8 @@ export async function getStoreDetailById(id: string): Promise<StoreDetailData | 
 
     return {
         id: String(resolvedStoreId ?? storeId),
+        ownerId:
+            storeDetail?.id_chu_so_huu != null ? Number(storeDetail.id_chu_so_huu) : null,
         title: String(matchedStore?.ten_cua_hang ?? storeDetail?.ten_cua_hang ?? 'Cửa hàng'),
         subtitle: 'Cửa hàng trên DishNet',
         coverImage,

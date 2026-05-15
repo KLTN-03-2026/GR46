@@ -60,6 +60,7 @@ export interface TabCounts {
 export interface StoreOrderItem {
   id: number;
   ma_don_hang: string;
+  id_nguoi_mua?: number;
   khach_hang: string;
   so_dien_thoai_khach: string;
   dia_chi_giao: string;
@@ -229,6 +230,16 @@ export const storeOrderApi = {
   giaoDonHang(maDonHang: string) {
     return request<{ message: string; trang_thai_moi: string }>(
       `${BASE}/${maDonHang}/giao`,
+      { method: 'PATCH' },
+    ).then((res) => {
+      emitStoreOverviewRefreshEvent();
+      return res;
+    });
+  },
+
+  hoanThanhDonHang(maDonHang: string) {
+    return request<{ message: string; trang_thai_moi: string }>(
+      `${BASE}/${maDonHang}/hoan-thanh`,
       { method: 'PATCH' },
     ).then((res) => {
       emitStoreOverviewRefreshEvent();

@@ -312,6 +312,7 @@ function DetailCard({
     onRefund,
     onReview,
     onReorder,
+    onChatStore,
 }: {
     order: UserOrder;
     onBack: () => void;
@@ -320,6 +321,7 @@ function DetailCard({
     onRefund: () => void;
     onReview: () => void;
     onReorder: () => void;
+    onChatStore: () => void;
 }) {
     const stageIndex = stageLabels.findIndex((stage) => stage.key === order.activeStage);
 
@@ -410,6 +412,15 @@ function DetailCard({
                             className="rounded-full bg-[#299a2e] px-8 py-2.5 text-[15px] font-semibold text-white"
                         >
                             Đã nhận hàng
+                        </button>
+                    ) : null}
+                    {order.storeOwnerId ? (
+                        <button
+                            type="button"
+                            onClick={onChatStore}
+                            className="rounded-full border border-[#1f89cf] bg-white px-6 py-2.5 text-[15px] font-semibold text-[#1f89cf] hover:bg-[#eaf4fb]"
+                        >
+                            💬 Nhắn tin
                         </button>
                     ) : null}
                 </div>
@@ -662,6 +673,7 @@ export default function UserOrdersPageClient() {
         return {
             id: String(item?.ma_don_hang ?? item?.id ?? ''),
             storeName: String(item?.ten_cua_hang ?? 'Cửa hàng'),
+            storeOwnerId: item?.id_chu_cua_hang != null ? Number(item.id_chu_cua_hang) : null,
             itemName: String(item?.ten_mon ?? 'Món ăn'),
             quantity: soLuong,
             image: String(item?.hinh_anh_mon ?? 'https://i.pravatar.cc/200'),
@@ -734,6 +746,10 @@ export default function UserOrdersPageClient() {
         return {
             id: String(item?.ma_don_hang ?? ''),
             storeName: String(item?.thong_tin_cua_hang?.ten_cua_hang ?? 'Cửa hàng'),
+            storeOwnerId:
+                item?.thong_tin_cua_hang?.id_chu_so_huu != null
+                    ? Number(item.thong_tin_cua_hang.id_chu_so_huu)
+                    : null,
             itemName: String(firstMon?.ten_mon ?? 'Món ăn'),
             quantity: tongSoLuong,
             image: String(firstMon?.hinh_anh ?? 'https://i.pravatar.cc/200'),
@@ -941,6 +957,21 @@ export default function UserOrdersPageClient() {
         }
     };
 
+    const handleChatStore = async (order: UserOrder) => {
+        if (!order.storeOwnerId) {
+            setActionError('Không xác định được chủ cửa hàng để nhắn tin');
+            return;
+        }
+        try {
+            await userCommerceApi.batDauTroChuyen(Number(order.storeOwnerId));
+            window.location.href = '/messages';
+        } catch (error) {
+            setActionError(
+                error instanceof Error ? error.message : 'Không thể bắt đầu trò chuyện',
+            );
+        }
+    };
+
     const handleConfirmReceived = async (order: UserOrder) => {
         try {
             setActionError(null);
@@ -977,6 +1008,7 @@ export default function UserOrdersPageClient() {
             onRefund={() => setRefundOrderId(selectedOrder.id)}
             onReview={() => setReviewOrderId(selectedOrder.id)}
             onReorder={() => void handleReorder(selectedOrder)}
+            onChatStore={() => void handleChatStore(selectedOrder)}
         />
     ) : activeOrders.length === 0 ? (
         <div className="flex min-h-[520px] items-center justify-center rounded-[20px] bg-white px-7 text-center shadow-[0_8px_22px_rgba(0,0,0,0.03)]"><div><div className="mx-auto flex h-[96px] w-[96px] items-center justify-center rounded-[24px] bg-[#eef7ff] text-[28px] font-bold text-[#1d71e8]">ĐH</div><h2 className="mt-8 text-[22px] font-bold text-black">Bạn chưa có đơn hàng nào</h2><p className="mx-auto mt-4 max-w-[520px] text-[16px] leading-[1.55] text-[#5f6f60]">Các đơn đang chuẩn bị, đang giao hoặc lịch sử đơn sẽ hiển thị tại đây để bạn theo dõi dễ hơn.</p></div></div>

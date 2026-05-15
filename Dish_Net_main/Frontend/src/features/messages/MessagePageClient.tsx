@@ -27,6 +27,39 @@ function formatTimeLabel(value?: string | null) {
     return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 }
 
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+function renderMessageContent(text: string, isMine: boolean) {
+    if (!text) return null;
+    const parts = text.split(URL_REGEX);
+    return parts.map((part, idx) => {
+        if (URL_REGEX.test(part)) {
+            URL_REGEX.lastIndex = 0;
+            let href = part;
+            try {
+                const u = new URL(part);
+                if (typeof window !== 'undefined' && u.origin === window.location.origin) {
+                    href = u.pathname + u.search + u.hash;
+                }
+            } catch {
+                // ignore parse error, dùng nguyên href
+            }
+            return (
+                <a
+                    key={idx}
+                    href={href}
+                    target={href.startsWith('/') ? '_self' : '_blank'}
+                    rel="noopener noreferrer"
+                    className={`underline underline-offset-2 ${isMine ? 'text-white' : 'text-[#2f7f27]'} hover:opacity-80`}
+                >
+                    {part}
+                </a>
+            );
+        }
+        return <span key={idx}>{part}</span>;
+    });
+}
+
 function resolveTargetUserId(rawId?: string) {
     if (!rawId) return null;
     const numeric = Number(rawId);
@@ -393,7 +426,7 @@ export default function MessagePageClient({ targetId }: { targetId?: string }) {
                                                 : 'rounded-bl-[8px] bg-white text-[#2f2f2f]'
                                         }`}
                                     >
-                                        <p>{message.noi_dung}</p>
+                                        <p className="whitespace-pre-wrap break-words">{renderMessageContent(message.noi_dung, message.la_tin_cua_toi)}</p>
                                         <div className={`mt-2 text-[12px] ${message.la_tin_cua_toi ? 'text-white/70' : 'text-[#8a8a8a]'}`}>
                                             {formatTimeLabel(message.thoi_gian_gui)}
                                         </div>

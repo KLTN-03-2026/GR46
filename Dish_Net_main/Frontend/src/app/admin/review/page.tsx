@@ -72,7 +72,7 @@ export default function ReviewPage() {
       setLoading(false);
       setRequests([]);
       setTotalPages(1);
-      setError(tuNgay || denNgay ? 'Vui lòng chọn đầy đủ từ ngày và đến ngày' : '');
+      setError(tuNgay || denNgay ? 'Vui lòng chọn đầy đủ Từ ngày và Đến ngày để lọc tùy chỉnh.' : '');
       return;
     }
 

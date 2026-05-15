@@ -218,8 +218,25 @@ export class StorePromotionService {
       throw new NotFoundException('Khuyến mãi không tồn tại');
     }
 
-    if (khuyenMai.trang_thai !== 'sap_dien_ra') {
-      throw new BadRequestException('Chỉ có thể kích hoạt khuyến mãi ở trạng thái sắp diễn ra');
+    if (khuyenMai.trang_thai === 'da_ket_thuc') {
+      throw new BadRequestException('Khuyến mãi đã kết thúc, không thể kích hoạt');
+    }
+
+    if (khuyenMai.trang_thai === 'dang_dien_ra') {
+      throw new BadRequestException('Khuyến mãi đang diễn ra');
+    }
+
+    const now = new Date();
+
+    if (khuyenMai.thoi_gian_ket_thuc <= now) {
+      throw new BadRequestException(
+        'Khuyến mãi đã quá thời gian kết thúc, vui lòng chỉnh sửa thời hạn trước khi kích hoạt',
+      );
+    }
+
+    // Kích hoạt sớm: đẩy thời gian bắt đầu về NOW nếu còn ở tương lai
+    if (khuyenMai.thoi_gian_bat_dau > now) {
+      khuyenMai.thoi_gian_bat_dau = now;
     }
 
     khuyenMai.trang_thai = 'dang_dien_ra';
@@ -418,13 +435,33 @@ export class StorePromotionService {
   ) {
     switch (sapXep) {
       case 'sap_het_han':
-        qb.orderBy('km.thoi_gian_ket_thuc', 'ASC').addOrderBy('km.id', 'DESC');
+        // KM còn hiệu lực (chưa hết hạn, chưa kết thúc) lên trước, sắp xếp theo end-date gần nhất
+        qb.addSelect(
+          `CASE WHEN km.thoi_gian_ket_thuc < NOW() OR km.trang_thai = 'da_ket_thuc' THEN 1 ELSE 0 END`,
+          'is_ended',
+        )
+          .orderBy('is_ended', 'ASC')
+          .addOrderBy('km.thoi_gian_ket_thuc', 'ASC')
+          .addOrderBy('km.id', 'DESC');
         break;
       case 'hieu_qua_cao_nhat':
         qb.orderBy('km.so_luot_da_dung', 'DESC').addOrderBy('km.id', 'DESC');
         break;
       case 'giam_gia_cao_nhat':
-        qb.orderBy('km.gia_tri_khuyen_mai', 'DESC').addOrderBy('km.id', 'DESC');
+        // Chuẩn hoá giá trị giảm để so sánh giữa các loại KM:
+        //  - so_tien: dùng nguyên gia_tri_khuyen_mai (số tiền giảm)
+        //  - phan_tram: ưu tiên gia_tri_toi_da (mức trần giảm theo tiền) nếu có
+        //  - mien_phi_van_chuyen: xếp cuối (giá trị mặc định 0)
+        qb.addSelect(
+          `CASE
+             WHEN km.loai_khuyen_mai = 'so_tien' THEN km.gia_tri_khuyen_mai
+             WHEN km.loai_khuyen_mai = 'phan_tram' THEN COALESCE(km.gia_tri_toi_da, km.gia_tri_khuyen_mai * 1000)
+             ELSE 0
+           END`,
+          'discount_value',
+        )
+          .orderBy('discount_value', 'DESC')
+          .addOrderBy('km.id', 'DESC');
         break;
       case 'moi_nhat':
       default:

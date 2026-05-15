@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UserProfile } from '@/features/profile/data';
 import OpenStoreFlow from '@/features/settings/OpenStoreFlow';
 import { useToast } from '@/shared/toast';
+import { useAuth } from '@/shared/AuthContext';
 import { authApi } from '@/shared/authApi';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 import { userContentApi } from '@/shared/userContentApi';
@@ -48,6 +49,7 @@ function parseBirthdateToIso(value: string): string | undefined {
    TAB 1 – Thông tin cá nhân
    ═══════════════════════════════════════════ */
 function PersonalInfoTab({ profile }: { profile: UserProfile }) {
+    const { kiemTraPhien } = useAuth();
     const [name, setName] = useState(profile.handle);
     const [gender, setGender] = useState(profile.gender);
     const [birthday, setBirthday] = useState(profile.birthday);
@@ -96,6 +98,7 @@ function PersonalInfoTab({ profile }: { profile: UserProfile }) {
                 cho_hien_thi_huy_hieu: showBadge,
                 cho_hien_thi_diem_uy_tin: showTrustScore,
             });
+            await kiemTraPhien();
             setSaveSuccess('Đã lưu thông tin cá nhân.');
         } catch (error) {
             setSaveError(
@@ -407,6 +410,45 @@ function getRequestStatusLabel(status?: ProfessionalRequestStatus) {
     return null;
 }
 
+const BANK_OPTIONS = [
+    'Vietcombank',
+    'Vietinbank',
+    'BIDV',
+    'Agribank',
+    'Techcombank',
+    'MB Bank',
+    'ACB',
+    'Sacombank',
+    'VPBank',
+    'TPBank',
+    'HDBank',
+    'SHB',
+    'VIB',
+    'OCB',
+    'Eximbank',
+    'SeABank',
+    'NCB',
+    'PVcomBank',
+    'Bac A Bank',
+    'LienVietPostBank',
+    'MSB',
+    'Saigonbank',
+    'Nam A Bank',
+    'ABBank',
+    'Kienlongbank',
+    'Vietbank',
+    'BaoVietBank',
+    'Standard Chartered',
+    'HSBC',
+    'CIMB',
+    'Shinhan Bank',
+    'UOB',
+    'Public Bank',
+    'Woori Bank',
+    'Cake by VPBank',
+    'Timo',
+];
+
 function ProfessionalTab({ profile }: { profile: UserProfile }) {
     const [step, setStep] = useState<ProfessionalStep>('menu');
     const [name, setName] = useState(profile.handle);
@@ -420,6 +462,43 @@ function ProfessionalTab({ profile }: { profile: UserProfile }) {
     const [description, setDescription] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [earnFieldErrors, setEarnFieldErrors] = useState<{
+        gender?: string;
+        birthday?: string;
+        bank?: string;
+        bankAccount?: string;
+        phone?: string;
+        address?: string;
+    }>({});
+
+    const clearEarnFieldError = (key: keyof typeof earnFieldErrors) =>
+        setEarnFieldErrors((prev) => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+
+    const validateEarnForm = () => {
+        const next: typeof earnFieldErrors = {};
+        if (!gender.trim()) next.gender = 'Vui lòng chọn giới tính.';
+        if (!birthday.trim()) next.birthday = 'Vui lòng chọn ngày sinh.';
+        if (!bank.trim()) next.bank = 'Vui lòng chọn ngân hàng.';
+        if (!bankAccount.trim()) next.bankAccount = 'Vui lòng nhập số tài khoản.';
+        else if (!/^\d{6,20}$/.test(bankAccount.trim()))
+            next.bankAccount = 'Số tài khoản chỉ gồm chữ số (6-20 ký tự).';
+
+        if (!phone.trim()) next.phone = 'Vui lòng nhập số điện thoại.';
+        else if (!/^0\d{9}$/.test(phone.trim()))
+            next.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.';
+
+        const addr = address.trim();
+        if (!addr) next.address = 'Vui lòng nhập địa chỉ.';
+        else if (addr.length < 3 || addr.length > 100)
+            next.address = 'Địa chỉ phải từ 3-100 ký tự.';
+
+        return next;
+    };
     const [pendingRequestLabel, setPendingRequestLabel] = useState<string | null>(null);
     const [requestsLoading, setRequestsLoading] = useState(true);
     const [requestLoadError, setRequestLoadError] = useState<string | null>(null);
@@ -595,8 +674,8 @@ function ProfessionalTab({ profile }: { profile: UserProfile }) {
             ) : null}
 
             <div className="mt-6 space-y-4">
-                {/* Tên tài khoản */}
-                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
+                {/* Tên tài khoản (readonly) */}
+                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-[#f5f5f3] px-4 py-3.5">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                         <circle cx="12" cy="7" r="4" />
@@ -604,70 +683,107 @@ function ProfessionalTab({ profile }: { profile: UserProfile }) {
                     <input
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        disabled={isEarnFormLocked}
+                        readOnly
+                        disabled
                         placeholder="Tên tài khoản"
-                        className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
+                        className="flex-1 cursor-not-allowed bg-transparent text-[15px] text-[#777] outline-none placeholder:text-[#999]"
                         id="pro-input-name"
                     />
                 </div>
 
                 {/* Giới tính + Ngày sinh */}
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                        <select
-                            value={normalizeGender(gender)}
-                            onChange={(e) => setGender(e.target.value)}
-                            disabled={isEarnFormLocked}
-                            className="w-full cursor-pointer bg-transparent text-[15px] text-black outline-none"
-                            id="pro-input-gender"
-                        >
-                            <option value="">-- Giới tính --</option>
-                            <option value="nu">Nữ</option>
-                            <option value="nam">Nam</option>
-                            <option value="khac">Khác</option>
-                        </select>
+                    <div className="flex flex-col">
+                        <div className={`rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.gender ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                            <select
+                                value={normalizeGender(gender)}
+                                onChange={(e) => { setGender(e.target.value); clearEarnFieldError('gender'); }}
+                                disabled={isEarnFormLocked}
+                                className="w-full cursor-pointer bg-transparent text-[15px] text-black outline-none"
+                                id="pro-input-gender"
+                            >
+                                <option value="">-- Giới tính --</option>
+                                <option value="nu">Nữ</option>
+                                <option value="nam">Nam</option>
+                                <option value="khac">Khác</option>
+                            </select>
+                        </div>
+                        {earnFieldErrors.gender ? (
+                            <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.gender}</p>
+                        ) : null}
                     </div>
-                    <div className="rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                        <input
-                            type="date"
-                            value={parseBirthdateToIso(birthday) ?? ''}
-                            onChange={(e) => setBirthday(e.target.value)}
-                            disabled={isEarnFormLocked}
-                            className="w-full cursor-pointer bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
-                            id="pro-input-birthday"
-                        />
+                    <div className="flex flex-col">
+                        <div className={`rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.birthday ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                            <input
+                                type="date"
+                                value={parseBirthdateToIso(birthday) ?? ''}
+                                onChange={(e) => { setBirthday(e.target.value); clearEarnFieldError('birthday'); }}
+                                disabled={isEarnFormLocked}
+                                className="w-full cursor-pointer bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
+                                id="pro-input-birthday"
+                            />
+                        </div>
+                        {earnFieldErrors.birthday ? (
+                            <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.birthday}</p>
+                        ) : null}
                     </div>
                 </div>
 
-                {/* Chọn ngân hàng */}
-                <div className="rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                    <input
-                        type="text"
-                        value={bank}
-                        onChange={(e) => setBank(e.target.value)}
-                        disabled={isEarnFormLocked}
-                        placeholder="Chọn ngân hàng"
-                        className="w-full bg-transparent text-center text-[15px] text-black outline-none placeholder:text-[#999]"
-                        id="pro-input-bank"
-                    />
+                {/* Chọn ngân hàng (dropdown) */}
+                <div className="flex flex-col">
+                    <div className={`rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.bank ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                        <select
+                            value={bank}
+                            onChange={(e) => { setBank(e.target.value); clearEarnFieldError('bank'); }}
+                            disabled={isEarnFormLocked}
+                            className="w-full cursor-pointer bg-transparent text-[15px] text-black outline-none"
+                            id="pro-input-bank"
+                        >
+                            <option value="">-- Chọn ngân hàng --</option>
+                            {BANK_OPTIONS.map((b) => (
+                                <option key={b} value={b}>{b}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {earnFieldErrors.bank ? (
+                        <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.bank}</p>
+                    ) : null}
                 </div>
 
                 {/* Số tài khoản ngân hàng */}
-                <div className="rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                    <input
-                        type="text"
-                        value={bankAccount}
-                        onChange={(e) => setBankAccount(e.target.value)}
-                        disabled={isEarnFormLocked}
-                        placeholder="Số tài khoản ngân hàng"
-                        className="w-full bg-transparent text-center text-[15px] text-black outline-none placeholder:text-[#999]"
-                        id="pro-input-bank-account"
-                    />
+                <div className="flex flex-col">
+                    <div className={`rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.bankAccount ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                        <input
+                            type="tel"
+                            inputMode="numeric"
+                            value={bankAccount}
+                            onChange={(e) => {
+                                const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 20);
+                                setBankAccount(onlyDigits);
+                                clearEarnFieldError('bankAccount');
+                            }}
+                            onKeyDown={(e) => {
+                                if (
+                                    e.key.length === 1 &&
+                                    !/[0-9]/.test(e.key) &&
+                                    !e.ctrlKey &&
+                                    !e.metaKey
+                                ) e.preventDefault();
+                            }}
+                            disabled={isEarnFormLocked}
+                            maxLength={20}
+                            placeholder="Số tài khoản ngân hàng"
+                            className="w-full bg-transparent text-center text-[15px] text-black outline-none placeholder:text-[#999]"
+                            id="pro-input-bank-account"
+                        />
+                    </div>
+                    {earnFieldErrors.bankAccount ? (
+                        <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.bankAccount}</p>
+                    ) : null}
                 </div>
 
-                {/* Email */}
-                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
+                {/* Email (readonly) */}
+                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-[#f5f5f3] px-4 py-3.5">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="2" y="4" width="20" height="16" rx="2" />
                         <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
@@ -675,45 +791,73 @@ function ProfessionalTab({ profile }: { profile: UserProfile }) {
                     <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        disabled={isEarnFormLocked}
+                        readOnly
+                        disabled
                         placeholder="Email"
-                        className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
+                        className="flex-1 cursor-not-allowed bg-transparent text-[15px] text-[#777] outline-none placeholder:text-[#999]"
                         id="pro-input-email"
                     />
                 </div>
 
                 {/* Số điện thoại */}
-                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                    </svg>
-                    <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        disabled={isEarnFormLocked}
-                        placeholder="Số điện thoại"
-                        className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
-                        id="pro-input-phone"
-                    />
+                <div className="flex flex-col">
+                    <div className={`flex items-center gap-3 rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.phone ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                        </svg>
+                        <input
+                            type="tel"
+                            inputMode="numeric"
+                            value={phone}
+                            onChange={(e) => {
+                                const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                setPhone(onlyDigits);
+                                clearEarnFieldError('phone');
+                            }}
+                            onKeyDown={(e) => {
+                                if (
+                                    e.key.length === 1 &&
+                                    !/[0-9]/.test(e.key) &&
+                                    !e.ctrlKey &&
+                                    !e.metaKey
+                                ) e.preventDefault();
+                            }}
+                            disabled={isEarnFormLocked}
+                            maxLength={10}
+                            placeholder="Ví dụ: 0901234567"
+                            className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
+                            id="pro-input-phone"
+                        />
+                    </div>
+                    {earnFieldErrors.phone ? (
+                        <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.phone}</p>
+                    ) : null}
                 </div>
 
                 {/* Địa chỉ */}
-                <div className="flex items-center gap-3 rounded-[10px] border border-[#e0ddd6] bg-white px-4 py-3.5">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                        <circle cx="12" cy="10" r="3" />
-                    </svg>
-                    <input
-                        type="text"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        disabled={isEarnFormLocked}
-                        placeholder="Địa chỉ"
-                        className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
-                        id="pro-input-address"
-                    />
+                <div className="flex flex-col">
+                    <div className={`flex items-center gap-3 rounded-[10px] border bg-white px-4 py-3.5 ${earnFieldErrors.address ? 'border-[#ef4444]' : 'border-[#e0ddd6]'}`}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                            <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <input
+                            type="text"
+                            value={address}
+                            onChange={(e) => {
+                                setAddress(e.target.value.slice(0, 100));
+                                clearEarnFieldError('address');
+                            }}
+                            disabled={isEarnFormLocked}
+                            maxLength={100}
+                            placeholder="Địa chỉ"
+                            className="flex-1 bg-transparent text-[15px] text-black outline-none placeholder:text-[#999]"
+                            id="pro-input-address"
+                        />
+                    </div>
+                    {earnFieldErrors.address ? (
+                        <p className="mt-1 text-[12px] text-[#ef4444]">{earnFieldErrors.address}</p>
+                    ) : null}
                 </div>
             </div>
 
@@ -736,19 +880,25 @@ function ProfessionalTab({ profile }: { profile: UserProfile }) {
                     onClick={async () => {
                         if (isEarnFormLocked) return;
                         if (isSubmitting) return;
-                        if (
-                            !name.trim() ||
-                            !birthday.trim() ||
-                            !bank.trim() ||
-                            !bankAccount.trim() ||
-                            !email.trim() ||
-                            !phone.trim() ||
-                            !address.trim()
-                        ) {
-                            setSubmitError('Vui lòng nhập đầy đủ thông tin bắt buộc.');
+                        const errs = validateEarnForm();
+                        if (Object.keys(errs).length > 0) {
+                            setEarnFieldErrors(errs);
+                            setSubmitError('Vui lòng kiểm tra lại các trường đang báo lỗi.');
+                            const firstKey = Object.keys(errs)[0];
+                            const map: Record<string, string> = {
+                                gender: 'pro-input-gender',
+                                birthday: 'pro-input-birthday',
+                                bank: 'pro-input-bank',
+                                bankAccount: 'pro-input-bank-account',
+                                phone: 'pro-input-phone',
+                                address: 'pro-input-address',
+                            };
+                            const elId = map[firstKey];
+                            if (elId) document.getElementById(elId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             return;
                         }
 
+                        setEarnFieldErrors({});
                         setSubmitError(null);
                         setIsSubmitting(true);
                         try {

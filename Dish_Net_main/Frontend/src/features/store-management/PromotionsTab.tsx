@@ -460,7 +460,7 @@ function PromoCard({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {(promo.status === 'active' || promo.status === 'upcoming') && (
+          {(promo.status === 'active' || promo.status === 'upcoming' || promo.status === 'paused') && (
             <button type="button" onClick={onEdit} className="rounded-[8px] border border-[#ddd] bg-white px-5 py-2 text-[13px] font-semibold text-[#555] transition hover:bg-[#f8f8f8]">Sửa</button>
           )}
           {promo.status === 'active' && (
@@ -469,7 +469,10 @@ function PromoCard({
           {promo.status === 'upcoming' && (
             <button type="button" onClick={onActivate} className="rounded-[8px] border border-[#2e7d32] bg-white px-4 py-2 text-[13px] font-semibold text-[#2e7d32] transition hover:bg-[#f6faf4]">Kích hoạt</button>
           )}
-          {(promo.status === 'active' || promo.status === 'upcoming') && (
+          {promo.status === 'paused' && (
+            <button type="button" onClick={onActivate} className="rounded-[8px] bg-[#2e7d32] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#256628]">🔓 Mở khoá</button>
+          )}
+          {(promo.status === 'active' || promo.status === 'upcoming' || promo.status === 'paused') && (
             <button type="button" onClick={onDelete} className="rounded-[8px] bg-[#d32f2f] px-5 py-2 text-[13px] font-semibold text-white transition hover:bg-[#b71c1c]">Xóa</button>
           )}
           {promo.status === 'ended' && (
@@ -487,6 +490,7 @@ function PromoCard({
 export default function PromotionsTab() {
   const [promos, setPromos] = useState<PromoUI[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
   const [statusFilter, setStatusFilter] = useState<PromoStatus | 'all'>('all');
   const [typeFilter, setPromoTypeFilter] = useState<PromoType | 'all'>('all');
   const [sortBy, setSortBy] = useState<SortOption>('moi_nhat');
@@ -502,11 +506,20 @@ export default function PromotionsTab() {
   const [typeDropOpen, setTypeDropOpen] = useState(false);
   const [sortDropOpen, setSortDropOpen] = useState(false);
 
+  // Debounce search input để tránh gọi API mỗi keystroke
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearchDebounced(searchText.trim());
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchText]);
+
   const fetchPromos = useCallback(async () => {
     setIsFetching(true);
     try {
       const res = await storePromotionApi.layDanhSach({
-        tim_kiem: searchText || undefined,
+        tim_kiem: searchDebounced || undefined,
         trang_thai: statusFilter,
         loai_khuyen_mai: typeFilter,
         sap_xep: sortBy,
@@ -520,7 +533,7 @@ export default function PromotionsTab() {
     } finally {
       setIsFetching(false);
     }
-  }, [searchText, statusFilter, typeFilter, sortBy, currentPage]);
+  }, [searchDebounced, statusFilter, typeFilter, sortBy, currentPage]);
 
   useEffect(() => {
     fetchPromos();
@@ -610,7 +623,7 @@ export default function PromotionsTab() {
       <div className="mt-4 flex items-center gap-3">
         <div className="flex flex-1 items-center gap-2 rounded-full border border-[#ddd] bg-white px-4 py-2">
           <input type="text" value={searchText}
-            onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => setSearchText(e.target.value)}
             placeholder="Tìm kiếm tên mã, code khuyến mãi"
             className="flex-1 bg-transparent text-[14px] text-black outline-none placeholder:text-[#999]" />
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>

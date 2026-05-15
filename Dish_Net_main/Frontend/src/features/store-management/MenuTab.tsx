@@ -78,18 +78,34 @@ function EditItemModal({
     setSaving(true);
     setError('');
     try {
+      const cleanToppings = toppings
+        .filter((t) => t.name.trim())
+        .map((t) => ({
+          ten_topping: t.name.trim(),
+          gia: Math.max(0, parseMoneyInput(t.price) ?? 0),
+        }));
       await storeMenuApi.capNhatMonAn(item.id, {
         ten_mon: name.trim(),
         mo_ta: desc,
         gia_ban: priceNum,
         id_danh_muc: idDanhMuc || undefined,
         trang_thai_ban: status,
-        toppings: toppings.filter((t) => t.name.trim()).map((t) => ({
-          ten_topping: t.name.trim(),
-          gia: Math.max(0, parseMoneyInput(t.price) ?? 0),
+        toppings: cleanToppings,
+      });
+      onSave({
+        ...item,
+        ten_mon: name,
+        mo_ta: desc,
+        gia_ban: priceNum,
+        id_danh_muc: idDanhMuc ? Number(idDanhMuc) : null,
+        trang_thai_ban: status,
+        toppings: cleanToppings.map((t, i) => ({
+          id: item.toppings[i]?.id ?? 0,
+          ten_topping: t.ten_topping,
+          gia: t.gia,
+          trang_thai: 'hieu_luc',
         })),
       });
-      onSave({ ...item, ten_mon: name, mo_ta: desc, gia_ban: priceNum, id_danh_muc: idDanhMuc ? Number(idDanhMuc) : null, trang_thai_ban: status });
       onClose();
     } catch (error: unknown) {
       setError(getErrorMessage(error, 'Lỗi khi lưu'));

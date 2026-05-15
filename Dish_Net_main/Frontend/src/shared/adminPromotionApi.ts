@@ -112,6 +112,12 @@ export const adminPromotionApi = {
     });
   },
 
+  kichHoat(id: number) {
+    return request<{ message: string }>(`${BASE}/${id}/kich-hoat`, {
+      method: 'PATCH',
+    });
+  },
+
   xoa(id: number) {
     return request<{ message: string }>(`${BASE}/${id}`, {
       method: 'DELETE',

@@ -141,6 +141,7 @@ export class StoreOrderService {
       du_lieu: items.map((item) => ({
         id: Number(item.id),
         ma_don_hang: item.ma_don_hang,
+        id_nguoi_mua: Number(item.id_nguoi_mua),
         khach_hang: item.nguoi_mua?.ten_hien_thi ?? 'Khách hàng',
         anh_dai_dien_khach: item.nguoi_mua?.anh_dai_dien ?? null,
         so_dien_thoai_khach: item.nguoi_mua?.so_dien_thoai ?? '',
@@ -414,6 +415,71 @@ export class StoreOrderService {
     return {
       message: 'Đơn hàng đã được chuyển sang trạng thái đang giao',
       trang_thai_moi: this.mapDbStatusToDisplay('dang_giao'),
+    };
+  }
+
+  async hoanThanhDonHang(nguoiDungId: number, maDonHang: string) {
+    const cuaHang = await this.layCuaHangCuaNguoiDung(nguoiDungId);
+
+    const donHang = await this.donHangRepo.findOne({
+      where: { ma_don_hang: maDonHang },
+    });
+
+    if (!donHang) {
+      throw new NotFoundException('Đơn hàng không tồn tại');
+    }
+
+    if (donHang.id_cua_hang !== cuaHang.id) {
+      throw new ForbiddenException('Bạn không có quyền cập nhật đơn hàng này');
+    }
+
+    if (donHang.trang_thai_don_hang !== 'dang_giao') {
+      throw new BadRequestException(
+        `Chỉ có thể hoàn thành đơn ở trạng thái Đang giao (hiện tại: "${this.mapDbStatusToDisplay(donHang.trang_thai_don_hang)}")`,
+      );
+    }
+
+    const now = new Date();
+    donHang.trang_thai_don_hang = 'da_giao';
+    donHang.thoi_gian_hoan_tat = now;
+    if (!donHang.thoi_gian_giao) {
+      donHang.thoi_gian_giao = now;
+    }
+
+    await this.donHangRepo.save(donHang);
+
+    // Cập nhật số lượng đã bán cho từng món
+    const chiTiet = await this.donHangChiTietRepo.find({
+      where: { id_don_hang: Number(donHang.id) },
+      select: ['id_mon_an', 'so_luong'],
+    });
+    const tongHopMon = new Map<number, number>();
+    for (const item of chiTiet) {
+      const idMonAn = Number(item.id_mon_an);
+      if (!Number.isFinite(idMonAn) || idMonAn <= 0) continue;
+      tongHopMon.set(idMonAn, (tongHopMon.get(idMonAn) ?? 0) + Number(item.so_luong || 0));
+    }
+    for (const [idMonAn, soLuong] of tongHopMon) {
+      await this.donHangRepo.manager
+        .createQueryBuilder()
+        .update('mon_an')
+        .set({ so_luong_da_ban: () => `so_luong_da_ban + ${soLuong}` })
+        .where('id = :id', { id: idMonAn })
+        .execute();
+    }
+
+    await this.lichSuDonHangRepo.save({
+      id_don_hang: Number(donHang.id),
+      trang_thai_tu: 'dang_giao',
+      trang_thai_den: 'da_giao',
+      noi_dung: 'Cửa hàng xác nhận đơn đã hoàn thành',
+      id_nguoi_cap_nhat: nguoiDungId,
+      thoi_gian_cap_nhat: now,
+    });
+
+    return {
+      message: 'Đơn hàng đã được đánh dấu hoàn thành',
+      trang_thai_moi: this.mapDbStatusToDisplay('da_giao'),
     };
   }
 

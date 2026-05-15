@@ -7,6 +7,16 @@ export interface RankingItem {
     popularity: string;
 }
 
+export interface HeroFeaturedDish {
+    id: string;
+    image: string;
+    name: string;
+    address?: string;
+    dealText?: string;
+    storeId?: number;
+    dishId?: number;
+}
+
 export interface HeroSection {
     eyebrow: string;
     title: string;
@@ -14,6 +24,7 @@ export interface HeroSection {
     ctaLabel: string;
     backgroundImage: string;
     collageImage: string;
+    featuredDishes?: HeroFeaturedDish[];
 }
 
 export interface SpotlightCard {

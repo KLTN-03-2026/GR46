@@ -125,10 +125,16 @@ function PostDetailModal({
 function ProfilePostCard({
   post,
   onOpenDetail,
+  onLike,
+  onOrder,
 }: {
   post: ReviewerProfilePost;
   onOpenDetail: (postId: number) => void;
+  onLike: (postId: number) => void;
+  onOrder: (post: ReviewerProfilePost) => void;
 }) {
+  const postId = Number(post.id);
+  const hasDishLink = Boolean(post.dishLink || post.dishId);
   return (
     <article className="border-t border-[#d6d6d6] px-5 py-4">
       <div className="flex items-center justify-between gap-3">
@@ -138,7 +144,7 @@ function ProfilePostCard({
         </div>
         <button
           type="button"
-          onClick={() => onOpenDetail(Number(post.id))}
+          onClick={() => onOpenDetail(postId)}
           className="rounded-full border border-[#d9d9d9] px-3 py-1 text-xs font-semibold text-[#2f2f2f] hover:bg-[#f5f5f5]"
         >
           Xem chi tiết
@@ -152,10 +158,42 @@ function ProfilePostCard({
           ))}
         </div>
       ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-5 text-[13px] text-[#505050]">
-        <span>♡ {post.likes}</span>
-        <span>◔ {post.comments}</span>
-        <span>↺ {post.shares}</span>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4 text-[13px] font-medium text-[#505050]">
+          <button
+            type="button"
+            onClick={() => onLike(postId)}
+            className={`inline-flex items-center gap-1.5 transition hover:text-[#e53935] ${post.isLiked ? 'text-[#e53935]' : ''}`}
+          >
+            <span className="text-[15px]">{post.isLiked ? '♥' : '♡'}</span>
+            {post.likeCount}
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenDetail(postId)}
+            className="inline-flex items-center gap-1.5 transition hover:text-[#285e19]"
+          >
+            <span className="text-[15px]">◔</span>
+            {post.commentCount}
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenDetail(postId)}
+            className="inline-flex items-center gap-1.5 transition hover:text-[#285e19]"
+          >
+            <span className="text-[15px]">↺</span>
+            {post.shareCount}
+          </button>
+        </div>
+        {hasDishLink ? (
+          <button
+            type="button"
+            onClick={() => onOrder(post)}
+            className="rounded-full border border-[#258f22] bg-[#dcebdc] px-4 py-1.5 text-xs font-bold text-[#285e19] transition hover:bg-[#cae4ca]"
+          >
+            Đặt món
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -300,6 +338,60 @@ export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer
     }
   };
 
+  const handleLikePost = async (postId: number) => {
+    if (!requireLogin()) return;
+    if (!Number.isFinite(postId) || postId <= 0) return;
+    try {
+      const payload = (await userContentApi.toggleThichBaiViet(postId)) as {
+        da_thich?: unknown;
+        tong_luot_thich?: unknown;
+      };
+      const daThich = Boolean(payload?.da_thich);
+      const tongLuotThich = Number(payload?.tong_luot_thich ?? 0);
+      setPosts((current) =>
+        current.map((item) =>
+          Number(item.id) === postId
+            ? {
+                ...item,
+                isLiked: daThich,
+                likeCount: Number.isFinite(tongLuotThich) ? tongLuotThich : item.likeCount,
+                likes: String(Number.isFinite(tongLuotThich) ? tongLuotThich : item.likeCount),
+              }
+            : item,
+        ),
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không thể thực hiện hành động');
+    }
+  };
+
+  const handleOrderFromPost = async (post: ReviewerProfilePost) => {
+    const postId = Number(post.id);
+    if (!Number.isFinite(postId) || postId <= 0) {
+      toast.error('Không xác định được bài viết để đặt món');
+      return;
+    }
+    try {
+      const payload = (await userContentApi.nhanLinkMonBaiViet(postId)) as {
+        url?: unknown;
+      };
+      const resolved = typeof payload?.url === 'string' ? payload.url.trim() : '';
+      const fallback = post.dishLink?.trim() ?? '';
+      const nextLink = resolved || fallback;
+      if (!nextLink) {
+        toast.warning('Bài viết này chưa gắn link món');
+        return;
+      }
+      if (/^https?:\/\//i.test(nextLink)) {
+        window.location.href = nextLink;
+      } else {
+        router.push(nextLink.startsWith('/') ? nextLink : `/${nextLink}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không thể mở link món');
+    }
+  };
+
   const handleReport = async () => {
     if (!requireLogin()) return;
     const reason = window.prompt('Nhập lý do báo cáo');
@@ -376,7 +468,13 @@ export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer
         {activeTab === 'posts' ? (
           <div>
             {visiblePosts.map((post) => (
-              <ProfilePostCard key={post.id} post={post} onOpenDetail={setActivePostDetailId} />
+              <ProfilePostCard
+                key={post.id}
+                post={post}
+                onOpenDetail={setActivePostDetailId}
+                onLike={(postId) => void handleLikePost(postId)}
+                onOrder={(target) => void handleOrderFromPost(target)}
+              />
             ))}
           </div>
         ) : null}

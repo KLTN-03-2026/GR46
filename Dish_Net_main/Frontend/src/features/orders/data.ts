@@ -5,6 +5,7 @@ export type UserOrdersByTab = Record<OrderTabKey, UserOrder[]>;
 export type UserOrder = {
     id: string;
     storeName: string;
+    storeOwnerId?: number | null;
     itemName: string;
     quantity: number;
     image: string;

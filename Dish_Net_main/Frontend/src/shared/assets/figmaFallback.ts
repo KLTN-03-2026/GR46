@@ -1,5 +1,5 @@
 export const figmaFallbackAssets = {
-    heroBanner: '/figma-fallback/hero-banner.svg',
+    heroBanner: '/hero-banner.jpg',
     dishCollage: '/figma-fallback/dish-collage.svg',
     storeImage: '/figma-fallback/store-image.svg',
     avatarSmall: '/figma-fallback/avatar-small.svg',

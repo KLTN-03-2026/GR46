@@ -4,22 +4,11 @@
 import { useEffect, useState } from 'react';
 
 import { userContentApi } from '@/shared/userContentApi';
+import { userCommerceApi } from '@/shared/userCommerceApi';
+import { emitUserCartRefreshEvent } from '@/shared/cartEvents';
+import { useAuth } from '@/shared/AuthContext';
 
 import type { FoodCommentCard, FoodReviewCard, RankingFoodDetailData } from './data';
-
-function ToolbarSelect({ label }: { label: string }) {
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                className="flex min-w-[136px] items-center justify-between gap-4 bg-white px-5 py-3 text-[15px] text-[#5f6660]"
-            >
-                <span>{label}</span>
-                <span>⌄</span>
-            </button>
-        </div>
-    );
-}
 
 function TagPill({ label, tone }: { label: string; tone: 'gold' | 'red' }) {
     return (
@@ -155,12 +144,42 @@ function CommentCard({ comment }: { comment: FoodCommentCard }) {
 }
 
 export default function RankingFoodDetailPageClient({ food }: { food: RankingFoodDetailData }) {
+    const { dangNhap } = useAuth();
     const [activeSection, setActiveSection] = useState<'reviews' | 'comments'>('reviews');
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [visibleReviewCount, setVisibleReviewCount] = useState(8);
     const [savedReviews, setSavedReviews] = useState<Array<{ id: number; ten_mon: string; ten_nguoi_danh_gia: string }>>([]);
     const [detailData, setDetailData] = useState<any | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [addingToCart, setAddingToCart] = useState(false);
+
+    useEffect(() => {
+        if (!actionMessage) return;
+        const timer = setTimeout(() => setActionMessage(null), 3500);
+        return () => clearTimeout(timer);
+    }, [actionMessage]);
+
+    const handleAddToCart = async () => {
+        const monAnId = Number(food.id);
+        if (!dangNhap) {
+            setActionMessage('Vui lòng đăng nhập để thêm vào giỏ hàng');
+            return;
+        }
+        if (!Number.isFinite(monAnId) || monAnId <= 0) {
+            setActionMessage('Món không hợp lệ');
+            return;
+        }
+        setAddingToCart(true);
+        try {
+            await userCommerceApi.themVaoGioHang({ id_mon_an: monAnId, so_luong: 1 });
+            emitUserCartRefreshEvent();
+            setActionMessage(`Đã thêm "${food.title}" vào giỏ hàng`);
+        } catch (err) {
+            setActionMessage(err instanceof Error ? err.message : 'Không thêm được vào giỏ hàng');
+        } finally {
+            setAddingToCart(false);
+        }
+    };
 
     useEffect(() => {
         const sectionIds: Array<'reviews' | 'comments'> = ['reviews', 'comments'];
@@ -245,10 +264,21 @@ export default function RankingFoodDetailPageClient({ food }: { food: RankingFoo
 
                             <button
                                 type="button"
-                                className="flex w-[146px] items-center justify-center gap-3 rounded-[12px] border border-[#404040] bg-white px-5 py-4 text-[18px] text-[#575757]"
+                                onClick={handleAddToCart}
+                                disabled={addingToCart}
+                                className="flex w-[200px] items-center justify-center gap-2 rounded-[12px] bg-[#2f6f25] px-5 py-4 text-[16px] font-semibold text-white shadow-sm transition hover:bg-[#245a1c] disabled:cursor-wait disabled:opacity-60"
                             >
-                                <span className="text-black">🔖</span>
-                                <span>Lưu</span>
+                                {addingToCart ? (
+                                    <>
+                                        <span className="block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                        <span>Đang thêm…</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>🛒</span>
+                                        <span>Thêm vào giỏ hàng</span>
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -318,18 +348,6 @@ export default function RankingFoodDetailPageClient({ food }: { food: RankingFoo
                                     </div>
                                 </div>
                             ) : null}
-
-                            <div className="flex flex-wrap items-center gap-3 bg-[#e7e9e2] p-4">
-                                <button type="button" className="flex min-w-[230px] items-center justify-between bg-white px-5 py-3 text-[15px] text-[#666666]">
-                                    <span>Đánh giá</span>
-                                    <span className="text-[#ffb31a]">★★★★☆</span>
-                                </button>
-                                <ToolbarSelect label="Thời gian" />
-                                <ToolbarSelect label="Lượng Thích" />
-                                <ToolbarSelect label="Bình luận" />
-                                <ToolbarSelect label="Đăng lại" />
-                                <ToolbarSelect label="Đã gửi" />
-                            </div>
 
                             <div className="grid gap-6 xl:grid-cols-2">
                                 {food.reviews.slice(0, visibleReviewCount).map((review) => (

@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { emitUserCartRefreshEvent } from '@/shared/cartEvents';
 import { userCommerceApi } from '@/shared/userCommerceApi';
+import AddressPickerMap from '@/features/checkout/AddressPickerMap';
 
 type CheckoutItem = {
   id_gio_hang: number;
@@ -213,11 +214,8 @@ export default function CheckoutPageClient() {
 
     if (!soDienThoai) {
       nextErrors.phone = 'Vui lòng nhập số điện thoại nhận hàng.';
-    } else {
-      const digitsOnly = soDienThoai.replace(/\D/g, '');
-      if (digitsOnly.length < 9 || digitsOnly.length > 11) {
-        nextErrors.phone = 'Số điện thoại không hợp lệ.';
-      }
+    } else if (!/^0\d{9}$/.test(soDienThoai)) {
+      nextErrors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.';
     }
 
     if (!diaChi) {
@@ -579,9 +577,34 @@ export default function CheckoutPageClient() {
                     Số điện thoại
                   </div>
                   <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={10}
+                    placeholder="Ví dụ: 0901234567"
                     value={phone}
                     onChange={(event) => {
-                      setPhone(event.target.value);
+                      // Chỉ giữ lại chữ số, loại bỏ chữ cái và ký tự khác, tối đa 10 ký tự
+                      const onlyDigits = event.target.value.replace(/\D/g, '').slice(0, 10);
+                      setPhone(onlyDigits);
+                      setFieldErrors((prev) => ({ ...prev, phone: undefined }));
+                    }}
+                    onKeyDown={(event) => {
+                      // Chặn các phím chữ ở keyboard layout không có inputMode-aware
+                      if (
+                        event.key.length === 1 &&
+                        !/[0-9]/.test(event.key) &&
+                        !event.ctrlKey &&
+                        !event.metaKey
+                      ) {
+                        event.preventDefault();
+                      }
+                    }}
+                    onPaste={(event) => {
+                      event.preventDefault();
+                      const text = event.clipboardData.getData('text');
+                      const onlyDigits = text.replace(/\D/g, '').slice(0, 10);
+                      setPhone(onlyDigits);
                       setFieldErrors((prev) => ({ ...prev, phone: undefined }));
                     }}
                     className={`h-[42px] w-full rounded-[10px] border px-4 text-[14px] text-black outline-none transition ${
@@ -595,26 +618,14 @@ export default function CheckoutPageClient() {
                   ) : null}
                 </label>
 
-                <label className="block">
-                  <div className="mb-2 text-[13px] font-semibold text-[#a8adb7]">
-                    Địa chỉ giao hàng
-                  </div>
-                  <input
-                    value={address}
-                    onChange={(event) => {
-                      setAddress(event.target.value);
-                      setFieldErrors((prev) => ({ ...prev, address: undefined }));
-                    }}
-                    className={`h-[42px] w-full rounded-[10px] border px-4 text-[14px] text-black outline-none transition ${
-                      fieldErrors.address
-                        ? 'border-[#ef4444] bg-[#fff7f7] focus:border-[#ef4444]'
-                        : 'border-[#e3e6eb] focus:border-[#cfd6df]'
-                    }`}
-                  />
-                  {fieldErrors.address ? (
-                    <p className="mt-1 text-[12px] text-[#ef4444]">{fieldErrors.address}</p>
-                  ) : null}
-                </label>
+                <AddressPickerMap
+                  address={address}
+                  onAddressChange={(next) => {
+                    setAddress(next);
+                    setFieldErrors((prev) => ({ ...prev, address: undefined }));
+                  }}
+                  error={fieldErrors.address}
+                />
 
                 <label className="block">
                   <div className="mb-2 text-[13px] font-semibold text-[#a8adb7]">

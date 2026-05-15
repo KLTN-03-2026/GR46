@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { CuaHangEntity } from '../Admin/entities/cua-hang.entity';
@@ -67,19 +67,24 @@ export class StoreOverviewService {
 
     const [danhSachDonHang, tongSoDonHang] = await danhSachQb.getManyAndCount();
 
-    const [thongKeTrangThai, topMonBanChayRaw, tongThuNhapRaw, thongKeHomNayRaw] =
+    const thongKeTrangThaiQb = this.donHangRepo
+      .createQueryBuilder('dh')
+      .select('dh.trang_thai_don_hang', 'trangThai')
+      .addSelect('COUNT(*)', 'soLuong')
+      .where('dh.id_cua_hang = :idCuaHang', { idCuaHang: cuaHang.id });
+    this.apDungBoLocThoiGian(thongKeTrangThaiQb, query, true);
+    thongKeTrangThaiQb.groupBy('dh.trang_thai_don_hang');
+
+    const tongThuNhapTheoBoLocQb = this.donHangRepo
+      .createQueryBuilder('dh')
+      .select('COALESCE(SUM(dh.thu_nhap_cua_hang), 0)', 'tongThuNhap')
+      .where('dh.id_cua_hang = :idCuaHang', { idCuaHang: cuaHang.id })
+      .andWhere('dh.trang_thai_don_hang = :trangThai', { trangThai: 'da_giao' });
+    this.apDungBoLocThoiGian(tongThuNhapTheoBoLocQb, query, true);
+
+    const [thongKeTrangThai, topMonBanChayRaw, tongThuNhapRaw, thongKeHomNayRaw, tongThuNhapTheoBoLocRaw] =
       await Promise.all([
-        this.donHangRepo
-          .createQueryBuilder('dh')
-          .select('dh.trang_thai_don_hang', 'trangThai')
-          .addSelect('COUNT(*)', 'soLuong')
-          .where('dh.id_cua_hang = :idCuaHang', { idCuaHang: cuaHang.id })
-          .andWhere('dh.thoi_gian_dat BETWEEN :from AND :to', {
-            from: homNayBatDau,
-            to: homNayKetThuc,
-          })
-          .groupBy('dh.trang_thai_don_hang')
-          .getRawMany<TrangThaiCountRaw>(),
+        thongKeTrangThaiQb.getRawMany<TrangThaiCountRaw>(),
         this.donHangChiTietRepo
           .createQueryBuilder('ct')
           .innerJoin(DonHangEntity, 'dh', 'dh.id = ct.id_don_hang')
@@ -138,6 +143,7 @@ export class StoreOverviewService {
             to: homNayKetThuc,
           })
           .getRawOne<{ tongDonHang: string; donHuy: string; doanhThu: string }>(),
+        tongThuNhapTheoBoLocQb.getRawOne<{ tongThuNhap: string }>(),
       ]);
 
     const demTrangThai = this.tinhDemTrangThai(thongKeTrangThai);
@@ -148,6 +154,7 @@ export class StoreOverviewService {
       demTrangThai.tra_hang;
 
     const tongThuNhapTrongNgay = Number(tongThuNhapRaw?.tongThuNhap ?? 0);
+    const tongThuNhapTheoBoLoc = Number(tongThuNhapTheoBoLocRaw?.tongThuNhap ?? 0);
 
     return {
       thong_tin_cua_hang: {
@@ -199,7 +206,29 @@ export class StoreOverviewService {
         tong_trang: Math.ceil(tongSoDonHang / soLuong),
       },
       tong_thu_nhap_trong_ngay: tongThuNhapTrongNgay,
+      tong_thu_nhap_theo_bo_loc: tongThuNhapTheoBoLoc,
     };
+  }
+
+  async capNhatTrangThaiHoatDong(nguoiDungId: number, trangThai?: string) {
+    const allowed = new Set(['hoat_dong', 'tam_nghi']);
+    if (!trangThai || !allowed.has(trangThai)) {
+      throw new BadRequestException('Trạng thái không hợp lệ');
+    }
+    const cuaHang = await this.layCuaHangCuaNguoiDung(nguoiDungId);
+    if (cuaHang.trang_thai_hoat_dong === 'cho_duyet' || cuaHang.trang_thai_hoat_dong === 'bi_khoa') {
+      throw new ForbiddenException('Cửa hàng đang chờ duyệt hoặc bị khóa, không thể đổi trạng thái');
+    }
+    cuaHang.trang_thai_hoat_dong = trangThai;
+    await this.cuaHangRepo.save(cuaHang);
+    return { trang_thai_hoat_dong: cuaHang.trang_thai_hoat_dong };
+  }
+
+  async capNhatAnhDaiDien(nguoiDungId: number, url: string) {
+    const cuaHang = await this.layCuaHangCuaNguoiDung(nguoiDungId);
+    cuaHang.anh_dai_dien = url;
+    await this.cuaHangRepo.save(cuaHang);
+    return { anh_dai_dien: cuaHang.anh_dai_dien };
   }
 
   private async layCuaHangCuaNguoiDung(

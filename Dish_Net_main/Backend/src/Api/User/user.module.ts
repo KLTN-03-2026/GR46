@@ -23,6 +23,7 @@ import { QuanHeNguoiDungEntity } from './entities/quan-he-nguoi-dung.entity';
 import { CuocTroChuyenEntity } from './entities/cuoc-tro-chuyen.entity';
 import { TinNhanEntity } from './entities/tin-nhan.entity';
 import { GioHangChiTietEntity } from './entities/gio-hang-chi-tiet.entity';
+import { ToppingEntity } from '../Admin/entities/topping.entity';
 import { ThanhToanEntity } from './entities/thanh-toan.entity';
 import { DonHangKhuyenMaiEntity } from './entities/don-hang-khuyen-mai.entity';
 import { PhienThanhToanEntity } from './entities/phien-thanh-toan.entity';
@@ -66,6 +67,7 @@ import {
       CuocTroChuyenEntity,
       TinNhanEntity,
       GioHangChiTietEntity,
+      ToppingEntity,
       ThanhToanEntity,
       DonHangKhuyenMaiEntity,
       PhienThanhToanEntity,

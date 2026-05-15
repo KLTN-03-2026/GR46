@@ -287,6 +287,8 @@ function GalleryModal({
 
 function FeedPostCard({
     post,
+    canFollow = true,
+    canShare = true,
     onComment,
     onOrder,
     onFollow,
@@ -297,6 +299,8 @@ function FeedPostCard({
     onOpenAuthorProfile,
 }: {
     post: FeedPost;
+    canFollow?: boolean;
+    canShare?: boolean;
     onComment: () => void;
     onOrder: () => void;
     onFollow: () => void;
@@ -354,19 +358,21 @@ function FeedPostCard({
                             {post.rating}
                         </span>
                     ) : null}
-                    <button
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onFollow();
-                        }}
-                        className={`rounded-full px-6 py-2 text-sm font-bold transition ${
-                            post.followLabel === 'Đang theo dõi'
-                                ? 'border border-[#258f22] bg-[#e8f4e7] text-[#1f771d] hover:bg-[#dcf0db]'
-                                : 'bg-[#258f22] text-white hover:bg-[#1f771d]'
-                        }`}
-                    >
-                        {post.followLabel}
-                    </button>
+                    {canFollow ? (
+                        <button
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onFollow();
+                            }}
+                            className={`rounded-full px-6 py-2 text-sm font-bold transition ${
+                                post.followLabel === 'Đang theo dõi'
+                                    ? 'border border-[#258f22] bg-[#e8f4e7] text-[#1f771d] hover:bg-[#dcf0db]'
+                                    : 'bg-[#258f22] text-white hover:bg-[#1f771d]'
+                            }`}
+                        >
+                            {post.followLabel}
+                        </button>
+                    ) : null}
                 </div>
             </div>
 
@@ -467,11 +473,12 @@ function FeedPostCard({
                     <button
                         onClick={(event) => {
                             event.stopPropagation();
-                            if (isRepost) return;
+                            if (isRepost || !canShare) return;
                             onShare();
                         }}
-                        disabled={isRepost}
-                        className={`inline-flex items-center gap-2 transition ${isRepost ? 'cursor-not-allowed text-[#b6b6b6]' : 'hover:text-[#285e19]'}`}
+                        disabled={isRepost || !canShare}
+                        title={!canShare && !isRepost ? 'Không thể chia sẻ bài viết của chính mình' : undefined}
+                        className={`inline-flex items-center gap-2 transition ${(isRepost || !canShare) ? 'cursor-not-allowed text-[#b6b6b6]' : 'hover:text-[#285e19]'}`}
                     >
                         Chia sẻ · {post.shareCount}
                     </button>
@@ -480,17 +487,19 @@ function FeedPostCard({
                     </button>
                     </div>
 
-                    <div className="shrink-0">
-                        <button
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onOrder();
-                            }}
-                            className="rounded-full border border-[#258f22] bg-[#dcebdc] px-6 py-2 text-sm font-bold text-[#285e19] transition hover:bg-[#cae4ca]"
-                        >
-                            Đặt món
-                        </button>
-                    </div>
+                    {post.dishLink || post.dishId ? (
+                        <div className="shrink-0">
+                            <button
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onOrder();
+                                }}
+                                className="rounded-full border border-[#258f22] bg-[#dcebdc] px-6 py-2 text-sm font-bold text-[#285e19] transition hover:bg-[#cae4ca]"
+                            >
+                                Đặt món
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </article>
@@ -1298,35 +1307,74 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                         <div className="rounded-[10px] bg-[#eaf8eb] px-4 py-3 text-sm text-[#285e19]">{actionMessage}</div>
                     ) : null}
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.9fr)]">
-                        <article className="relative overflow-hidden rounded-[24px] bg-[#285e19] shadow-[0_18px_50px_rgba(40,94,25,0.18)]">
-                            <img src={data.hero.backgroundImage} alt={data.hero.title} className="absolute inset-0 h-full w-full object-cover" />
-                            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,52,11,0.82)_0%,rgba(33,92,19,0.28)_55%,rgba(33,92,19,0.1)_100%)]" />
-                            <div className="relative grid min-h-[364px] gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+                        <article className="relative overflow-hidden rounded-[24px] bg-[#1a3611] shadow-[0_18px_50px_rgba(40,94,25,0.18)]">
+                            <img
+                                src={data.hero.backgroundImage}
+                                alt={data.hero.title}
+                                className="absolute inset-0 h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,24,4,0.86)_0%,rgba(10,32,7,0.6)_42%,rgba(10,32,7,0.18)_100%)]" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_30%,rgba(255,142,60,0.18)_0%,rgba(255,142,60,0)_60%)]" />
+                            <div className="relative grid min-h-[420px] gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.6fr)] lg:items-center">
                                 <div className="max-w-[360px] text-white">
-                                    <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/75">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/75">
                                         {data.hero.eyebrow}
                                     </p>
-                                    <h1 className="mt-4 text-4xl font-bold leading-tight sm:text-5xl">
+                                    <h1 className="mt-3 text-4xl font-bold leading-tight sm:text-5xl">
                                         {data.hero.title}
                                     </h1>
-                                    <p className="mt-4 text-base leading-7 text-white/85">
+                                    <p className="mt-3 text-sm leading-6 text-white/85">
                                         {data.hero.description}
                                     </p>
                                     <button
                                         onClick={() => dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                                        className="mt-8 inline-flex items-center rounded-full border border-white/60 px-6 py-3 text-lg font-semibold text-white transition hover:bg-white/12"
+                                        className="mt-5 inline-flex items-center text-base font-semibold text-white underline-offset-4 transition hover:underline"
                                     >
                                         {data.hero.ctaLabel}
                                     </button>
                                 </div>
 
-                                <div className="justify-self-end rounded-[20px] bg-white/8 p-2 backdrop-blur-sm">
-                                    <img
-                                        src={data.hero.collageImage}
-                                        alt="Bộ sưu tập món ăn"
-                                        className="h-[220px] w-full max-w-[420px] rounded-[18px] object-cover"
-                                    />
-                                </div>
+                                {data.hero.featuredDishes && data.hero.featuredDishes.length > 0 ? (
+                                    <div className="rounded-[18px] bg-white/95 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)] ring-1 ring-white/40 backdrop-blur-sm">
+                                        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                                            {data.hero.featuredDishes.slice(0, 6).map((dish) => {
+                                                const href = dish.storeId
+                                                    ? `/explore/store/${dish.storeId}`
+                                                    : dish.dishId
+                                                        ? `/ranking/food/${dish.dishId}`
+                                                        : '#';
+                                                return (
+                                                    <Link
+                                                        key={dish.id}
+                                                        href={href}
+                                                        title={dish.name}
+                                                        className="group flex flex-col overflow-hidden rounded-[12px] bg-white ring-1 ring-[#e9ece5] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(0,0,0,0.12)]"
+                                                    >
+                                                        <div className="relative aspect-[5/4] w-full overflow-hidden bg-[#f4f4f0]">
+                                                            <img
+                                                                src={dish.image}
+                                                                alt={dish.name}
+                                                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                                            />
+                                                        </div>
+                                                        <div className="flex flex-1 flex-col gap-1 px-2.5 pb-2 pt-2">
+                                                            <p className="line-clamp-1 text-[13px] font-semibold leading-snug text-[#1f2937]">
+                                                                {dish.name}
+                                                            </p>
+                                                            {dish.address ? (
+                                                                <p className="line-clamp-1 text-[11px] text-[#6b7280]">{dish.address}</p>
+                                                            ) : null}
+                                                            <div className="mt-1 flex items-center gap-1.5 border-t border-[#f1f1ee] pt-1.5 text-[11px] font-semibold text-[#d93025]">
+                                                                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-[#d93025] text-[8px] text-white">▸</span>
+                                                                <span className="text-[#1f6feb]">{dish.dealText ?? 'Xem món'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ) : null}
                             </div>
                         </article>
 
@@ -1429,6 +1477,8 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                     <FeedPostCard
                                         key={post.id}
                                         post={post}
+                                        canFollow={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
+                                        canShare={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
                                         onComment={() => {
                                             setActiveCommentStore(post.storeName || post.author || 'Bài viết');
                                             setActiveCommentPostId(Number(post.id) || null);

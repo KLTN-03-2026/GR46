@@ -51,7 +51,7 @@ export class AuthService {
     const emailTonTai = await this.nguoiDungRepo.findOne({
       where: { email: dto.email },
     });
-    if (emailTonTai) {
+    if (emailTonTai && emailTonTai.trang_thai_tai_khoan !== "cho_xac_thuc") {
       throw new ConflictException("Email đã được sử dụng");
     }
 
@@ -59,29 +59,53 @@ export class AuthService {
       const sdtTonTai = await this.nguoiDungRepo.findOne({
         where: { so_dien_thoai: dto.so_dien_thoai },
       });
-      if (sdtTonTai) {
+      if (sdtTonTai && sdtTonTai.id !== emailTonTai?.id) {
         throw new ConflictException("Số điện thoại đã được sử dụng");
       }
     }
 
-    const tenDangNhap =
-      dto.email.split("@")[0] + "_" + Date.now().toString().slice(-4);
     const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
     const matKhauBam = await hash(dto.mat_khau, saltRounds);
 
-    const nguoiDung = this.nguoiDungRepo.create({
-      ten_dang_nhap: tenDangNhap,
-      email: dto.email,
-      so_dien_thoai: dto.so_dien_thoai ?? null,
-      mat_khau_bam: matKhauBam,
-      ten_hien_thi: dto.ten_hien_thi,
-      khu_vuc: dto.khu_vuc ?? null,
-      dia_chi: dto.dia_chi ?? null,
-      trang_thai_tai_khoan: "cho_xac_thuc",
-      nguon_dang_ky: "email",
-    });
+    let savedUser: NguoiDungEntity;
+    let tenDangNhap: string;
 
-    const savedUser = await this.nguoiDungRepo.save(nguoiDung);
+    if (emailTonTai) {
+      tenDangNhap = emailTonTai.ten_dang_nhap;
+      emailTonTai.so_dien_thoai = dto.so_dien_thoai ?? null;
+      emailTonTai.mat_khau_bam = matKhauBam;
+      emailTonTai.ten_hien_thi = dto.ten_hien_thi;
+      emailTonTai.khu_vuc = dto.khu_vuc ?? null;
+      emailTonTai.dia_chi = dto.dia_chi ?? null;
+      emailTonTai.kieu_khoa_tai_khoan = null;
+      emailTonTai.thoi_gian_mo_khoa = null;
+      emailTonTai.ly_do_khoa_hien_tai = null;
+      savedUser = await this.nguoiDungRepo.save(emailTonTai);
+
+      await this.maXacThucRepo.update(
+        {
+          id_nguoi_dung: savedUser.id,
+          loai_xac_thuc: "dang_ky",
+          trang_thai: "hieu_luc",
+        },
+        { trang_thai: "da_huy" },
+      );
+    } else {
+      tenDangNhap =
+        dto.email.split("@")[0] + "_" + Date.now().toString().slice(-4);
+      const nguoiDung = this.nguoiDungRepo.create({
+        ten_dang_nhap: tenDangNhap,
+        email: dto.email,
+        so_dien_thoai: dto.so_dien_thoai ?? null,
+        mat_khau_bam: matKhauBam,
+        ten_hien_thi: dto.ten_hien_thi,
+        khu_vuc: dto.khu_vuc ?? null,
+        dia_chi: dto.dia_chi ?? null,
+        trang_thai_tai_khoan: "cho_xac_thuc",
+        nguon_dang_ky: "email",
+      });
+      savedUser = await this.nguoiDungRepo.save(nguoiDung);
+    }
 
     const maOtp = this.taoMaOtp();
     const thoiGianHetHan = new Date(
@@ -291,7 +315,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Email khong ton tai trong he thong");
+      throw new NotFoundException("Email không tồn tại trong hệ thống");
     }
 
     await this.maXacThucRepo.update(
@@ -324,7 +348,7 @@ export class AuthService {
       nguoiDung.ten_hien_thi,
     );
 
-    return { message: "Ma OTP da duoc gui ve email cua ban" };
+    return { message: "Mã OTP đã được gửi về email của bạn" };
   }
 
   async xacNhanQuenMatKhau(dto: XacNhanOtpDto) {
@@ -332,12 +356,12 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Email khong ton tai");
+      throw new NotFoundException("Email không tồn tại");
     }
 
     await this.timOtpHieuLuc(nguoiDung.id, "quen_mat_khau", dto.ma_otp);
 
-    return { message: "Ma OTP hop le" };
+    return { message: "Mã OTP hợp lệ" };
   }
 
   async datLaiMatKhau(dto: DatLaiMatKhauDto) {
@@ -351,7 +375,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Email khong ton tai");
+      throw new NotFoundException("Email không tồn tại");
     }
 
     const otp = await this.timOtpHieuLuc(
@@ -369,6 +393,10 @@ export class AuthService {
 
     const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
     nguoiDung.mat_khau_bam = await hash(dto.mat_khau_moi, saltRounds);
+    if (nguoiDung.trang_thai_tai_khoan === "cho_xac_thuc") {
+      nguoiDung.trang_thai_tai_khoan = "hoat_dong";
+      nguoiDung.thoi_gian_xac_thuc_email = new Date();
+    }
     await this.nguoiDungRepo.save(nguoiDung);
 
     otp.trang_thai = "da_dung";
@@ -385,7 +413,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Email khong ton tai");
+      throw new NotFoundException("Email không tồn tại");
     }
 
     await this.maXacThucRepo.update(
@@ -426,7 +454,7 @@ export class AuthService {
       );
     }
 
-    return { message: "Ma OTP moi da duoc gui ve email cua ban" };
+    return { message: "Mã OTP mới đã được gửi về email của bạn" };
   }
 
   async doiMatKhau(
@@ -442,7 +470,7 @@ export class AuthService {
 
     const nguoiDung = await this.nguoiDungRepo.findOne({ where: { id: userId } });
     if (!nguoiDung) {
-      throw new NotFoundException("Nguoi dung khong ton tai");
+      throw new NotFoundException("Người dùng không tồn tại");
     }
 
     const matKhauCuDung = await compare(
@@ -450,7 +478,7 @@ export class AuthService {
       nguoiDung.mat_khau_bam,
     );
     if (!matKhauCuDung) {
-      throw new BadRequestException("Mat khau hien tai khong dung");
+      throw new BadRequestException("Mật khẩu hiện tại không đúng");
     }
 
     const laMatKhauCu = await compare(dto.mat_khau_moi, nguoiDung.mat_khau_bam);
@@ -489,7 +517,7 @@ export class AuthService {
       where: { id: userId },
     });
     if (!nguoiDung) {
-      throw new NotFoundException("Nguoi dung khong ton tai");
+      throw new NotFoundException("Người dùng không tồn tại");
     }
 
     const { mat_khau_bam, ...thongTin } = nguoiDung;
@@ -501,8 +529,9 @@ export class AuthService {
   }
 
   private layDanhSachVaiTro(nguoiDung: NguoiDungEntity): string[] {
+    // Vai trò "nha_sang_tao" được gộp vào "nguoi_dung" vì nhà sáng tạo
+    // cũng là người dùng thường, chỉ khác là được duyệt kiếm tiền nội dung.
     const vaiTro: string[] = ["nguoi_dung"];
-    if (nguoiDung.la_nha_sang_tao) vaiTro.push("nha_sang_tao");
     if (nguoiDung.la_chu_cua_hang) vaiTro.push("chu_cua_hang");
     if (nguoiDung.la_admin) vaiTro.push("admin");
     return vaiTro;
@@ -523,13 +552,13 @@ export class AuthService {
     });
 
     if (!otp) {
-      throw new BadRequestException("Ma OTP khong dung");
+      throw new BadRequestException("Mã OTP không đúng");
     }
 
     if (new Date() > otp.thoi_gian_het_han) {
       otp.trang_thai = "het_han";
       await this.maXacThucRepo.save(otp);
-      throw new BadRequestException("Ma OTP da het han");
+      throw new BadRequestException("Mã OTP đã hết hạn");
     }
 
     return otp;
@@ -635,10 +664,29 @@ export class AuthService {
     if (nguoiDung.thoi_gian_mo_khoa.getTime() <= Date.now()) {
       nguoiDung.kieu_khoa_tai_khoan = null;
       nguoiDung.thoi_gian_mo_khoa = null;
+      if (nguoiDung.trang_thai_tai_khoan === "bi_khoa") {
+        nguoiDung.trang_thai_tai_khoan = "hoat_dong";
+        nguoiDung.ly_do_khoa_hien_tai = null;
+      }
       this.setFailedAttempts(nguoiDung, 0);
       await this.nguoiDungRepo.save(nguoiDung);
       return;
     }
+
+    const laAdminKhoa = nguoiDung.trang_thai_tai_khoan === "bi_khoa";
+    if (laAdminKhoa) {
+      const thoiGianMoKhoa = nguoiDung.thoi_gian_mo_khoa.toLocaleString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+      throw new UnauthorizedException(
+        `Tài khoản của bạn đã bị tạm khóa. Vui lòng đăng nhập lại sau ${thoiGianMoKhoa}.`,
+      );
+    }
+
     throw new UnauthorizedException(
       `Bạn đã nhập sai quá ${AuthService.MAX_LOGIN_ATTEMPTS} lần. Vui lòng thử lại sau ${AuthService.LOGIN_BLOCK_MINUTES} phút.`,
     );

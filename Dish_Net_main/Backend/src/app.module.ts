@@ -11,6 +11,7 @@ import { AuthModule } from "./Api/Auth/auth.module";
 import { AdminModule } from "./Api/Admin/admin.module";
 import { StoreModule } from "./Api/Store/store.module";
 import { UserModule } from "./Api/User/user.module";
+import { ChatbotModule } from "./Api/Chatbot/chatbot.module";
 import { EmailModule } from "./shared/email/email.module";
 
 @Module({
@@ -22,6 +23,7 @@ import { EmailModule } from "./shared/email/email.module";
     AdminModule,
     StoreModule,
     UserModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [

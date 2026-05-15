@@ -6,26 +6,17 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
+import ExploreAddressMap from '@/features/explore/ExploreAddressMap';
 
 import type { ExploreCategory, ExplorePageData, ExploreStoreCard } from './data';
 
-const addressSuggestions = [
-    {
-        id: '1',
-        title: 'Clb Đa Nẵng',
-        address: '143 Nguyễn Du, P.Bến Thành, Q.1, Hồ Chí Minh',
-    },
-    {
-        id: '2',
-        title: 'Sân Tập Luyện Bóng Đá Năng Khiếu TP.HCM',
-        address: '215 Lý Thường Kiệt, P.15, Q.11, Hồ Chí Minh',
-    },
-    {
-        id: '3',
-        title: 'Da Nang Tour Packages',
-        address: '1 Đường Cống Quỳnh, P.Phạm Ngũ Lão, Q.1, Hồ Chí Minh',
-    },
-];
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? '';
+
+type MapTilerAddressSuggestion = {
+    id: string;
+    title: string;
+    address: string;
+};
 
 function SectionHeading({
     title,
@@ -212,6 +203,9 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
     const [visibleSearchCount, setVisibleSearchCount] = useState(8);
     const addressRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const skipNextAddressSearchRef = useRef(false);
+    const [addressSuggestions, setAddressSuggestions] = useState<MapTilerAddressSuggestion[]>([]);
+    const [isLoadingAddress, setIsLoadingAddress] = useState(false);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -245,12 +239,43 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
         };
     }, [isFoodSearchOpen]);
 
-    const keyword = deliveryAddress.trim().toLowerCase();
-    const filteredAddressSuggestions = !keyword
-        ? addressSuggestions
-        : addressSuggestions.filter((item) =>
-            `${item.title} ${item.address}`.toLowerCase().includes(keyword),
-        );
+    useEffect(() => {
+        if (!MAPTILER_KEY) return;
+        if (skipNextAddressSearchRef.current) {
+            skipNextAddressSearchRef.current = false;
+            return;
+        }
+        const query = deliveryAddress.trim();
+        if (query.length < 3) {
+            setAddressSuggestions([]);
+            setIsLoadingAddress(false);
+            return;
+        }
+        setIsLoadingAddress(true);
+        const handler = setTimeout(async () => {
+            try {
+                const res = await fetch(
+                    `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=vi&country=vn&types=address,poi,street&limit=6&autocomplete=true`,
+                );
+                const data = await res.json();
+                const items: MapTilerAddressSuggestion[] = (data?.features ?? []).map((f: { id?: unknown; place_name?: unknown; text?: unknown }, index: number) => {
+                    const placeName = String(f.place_name ?? '');
+                    const title = String(f.text ?? placeName.split(',')[0] ?? '');
+                    return {
+                        id: String(f.id ?? `${index}-${placeName}`),
+                        title,
+                        address: placeName,
+                    };
+                });
+                setAddressSuggestions(items);
+            } catch {
+                setAddressSuggestions([]);
+            } finally {
+                setIsLoadingAddress(false);
+            }
+        }, 350);
+        return () => clearTimeout(handler);
+    }, [deliveryAddress]);
     const hotKeywords = [
         'mì cay',
         'bún đậu mắm tôm',
@@ -390,31 +415,37 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                                 <button className="text-[22px] text-[#7b86a6]">⌖</button>
                             </div>
 
-                            {isAddressOpen && (
+                            {isAddressOpen && deliveryAddress.trim().length >= 3 && (addressSuggestions.length > 0 || isLoadingAddress) && (
                                 <div className="absolute left-0 top-[calc(100%+14px)] z-20 w-full overflow-hidden rounded-[20px] bg-white shadow-[0_24px_40px_rgba(15,23,42,0.12)]">
-                                    {filteredAddressSuggestions.map((item, index) => (
-                                        <button
-                                            key={item.id}
-                                            type="button"
-                                            onClick={() => {
-                                                setDeliveryAddress(item.address);
-                                                setIsAddressOpen(false);
-                                            }}
-                                            className={`flex w-full items-start gap-5 px-6 py-5 text-left transition hover:bg-[#f8fbff] ${index !== filteredAddressSuggestions.length - 1 ? 'border-b border-[#eef2f6]' : ''}`}
-                                        >
-                                            <span className="mt-1 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#eef2f8] text-[24px] text-[#6d778f]">
-                                                📍
-                                            </span>
-                                            <span className="min-w-0">
-                                                <span className="block truncate text-[20px] font-semibold text-[#20315f]">
-                                                    {item.title}
+                                    {isLoadingAddress && addressSuggestions.length === 0 ? (
+                                        <div className="px-6 py-5 text-[16px] text-[#64748b]">Đang tìm địa chỉ...</div>
+                                    ) : (
+                                        addressSuggestions.map((item, index) => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    skipNextAddressSearchRef.current = true;
+                                                    setDeliveryAddress(item.address);
+                                                    setAddressSuggestions([]);
+                                                    setIsAddressOpen(false);
+                                                }}
+                                                className={`flex w-full items-start gap-5 px-6 py-5 text-left transition hover:bg-[#f8fbff] ${index !== addressSuggestions.length - 1 ? 'border-b border-[#eef2f6]' : ''}`}
+                                            >
+                                                <span className="mt-1 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#eef2f8] text-[24px] text-[#6d778f]">
+                                                    📍
                                                 </span>
-                                                <span className="mt-1 block truncate text-[16px] text-[#64748b]">
-                                                    {item.address}
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-[20px] font-semibold text-[#20315f]">
+                                                        {item.title}
+                                                    </span>
+                                                    <span className="mt-1 block truncate text-[16px] text-[#64748b]">
+                                                        {item.address}
+                                                    </span>
                                                 </span>
-                                            </span>
-                                        </button>
-                                    ))}
+                                            </button>
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -438,6 +469,15 @@ export default function ExplorePageClient({ data }: { data: ExplorePageData }) {
                         </button>
                     </div>
                 </div>
+
+                {!activeCategory && (
+                    <div className="pb-12">
+                        <ExploreAddressMap
+                            address={deliveryAddress}
+                            onAddressChange={setDeliveryAddress}
+                        />
+                    </div>
+                )}
 
                 {activeSearchResult ? (
                     <section className="space-y-8">

@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 
 import type { UserProfile } from '@/features/profile/data';
 import { useToast } from '@/shared/toast';
+import { useAuth } from '@/shared/AuthContext';
 import { userContentApi } from '@/shared/userContentApi';
 
 function Toggle({
@@ -67,9 +68,31 @@ export default function EditProfilePageClient({
 }) {
     const router = useRouter();
     const toast = useToast();
+    const { kiemTraPhien } = useAuth();
+    const toInputDate = (value: string): string => {
+        if (!value) return '';
+        const v = value.trim();
+        const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+        const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+        if (dmy) {
+            const [, d, m, y] = dmy;
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        const dt = new Date(v);
+        if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+        return '';
+    };
+
+    const maxBirthdayIso = (() => {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - 16);
+        return d.toISOString().slice(0, 10);
+    })();
+
     const [accountName, setAccountName] = useState(profile.handle || profile.name);
     const [gender, setGender] = useState(profile.gender);
-    const [birthday, setBirthday] = useState(profile.birthday);
+    const [birthday, setBirthday] = useState(toInputDate(profile.birthday));
     const [bio, setBio] = useState(profile.bio || '');
     const [showGender, setShowGender] = useState(false);
     const [showBirthday, setShowBirthday] = useState(false);
@@ -91,16 +114,8 @@ export default function EditProfilePageClient({
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
     const toIsoDate = (value: string) => {
-        const v = value.trim();
-        if (!v) return undefined;
-        const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
-        if (dmy) {
-            const [, d, m, y] = dmy;
-            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        }
-        const dt = new Date(v);
-        if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-        return undefined;
+        const result = toInputDate(value);
+        return result || undefined;
     };
 
     const normalizeGender = (value: string): 'nam' | 'nu' | 'khac' => {
@@ -125,8 +140,24 @@ export default function EditProfilePageClient({
             nextErrors.accountName = 'Tên tài khoản tối đa 50 ký tự.';
         }
 
-        if (birthday.trim() && !toIsoDate(birthday)) {
-            nextErrors.birthday = 'Ngày sinh không hợp lệ (dd/mm/yyyy).';
+        if (birthday.trim()) {
+            const iso = toIsoDate(birthday);
+            if (!iso) {
+                nextErrors.birthday = 'Ngày sinh không hợp lệ.';
+            } else {
+                const birth = new Date(`${iso}T00:00:00`);
+                const now = new Date();
+                if (birth.getTime() > now.getTime()) {
+                    nextErrors.birthday = 'Ngày sinh không được ở tương lai.';
+                } else {
+                    let age = now.getFullYear() - birth.getFullYear();
+                    const m = now.getMonth() - birth.getMonth();
+                    if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age -= 1;
+                    if (age < 16) {
+                        nextErrors.birthday = 'Bạn phải đủ 16 tuổi trở lên.';
+                    }
+                }
+            }
         }
 
         if (bio.length > 80) {
@@ -155,6 +186,7 @@ export default function EditProfilePageClient({
                 cho_hien_thi_huy_hieu: showBadge,
                 cho_hien_thi_diem_uy_tin: showTrustScore,
             });
+            await kiemTraPhien();
             setIsSaving(false);
             setSaved(true);
             toast.success('Đã lưu thông tin cá nhân');
@@ -304,26 +336,18 @@ export default function EditProfilePageClient({
                             <div className="flex items-center gap-3">
                                 <div className="relative flex-1">
                                     <input
-                                        type="text"
+                                        type="date"
                                         value={birthday}
+                                        max={maxBirthdayIso}
                                         onChange={(e) => {
                                             setBirthday(e.target.value);
                                             setFieldErrors((current) => ({ ...current, birthday: undefined, general: undefined }));
                                         }}
-                                        placeholder="dd/mm/yyyy"
-                                        className={`h-12 w-full rounded-[10px] border bg-white px-4 pr-11 text-[15px] text-[#1d1d1d] outline-none transition ${
+                                        className={`h-12 w-full rounded-[10px] border bg-white px-4 text-[15px] text-[#1d1d1d] outline-none transition ${
                                             fieldErrors.birthday ? 'border-[#e04f4f] focus:border-[#e04f4f]' : 'border-[#e1e5ea] focus:border-[#2f8f22]'
                                         }`}
                                         id="input-birthday"
                                     />
-                                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#666]">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <rect x="3" y="4" width="18" height="18" rx="2" />
-                                            <line x1="16" y1="2" x2="16" y2="6" />
-                                            <line x1="8" y1="2" x2="8" y2="6" />
-                                            <line x1="3" y1="10" x2="21" y2="10" />
-                                        </svg>
-                                    </span>
                                 </div>
                                 <Toggle checked={showBirthday} onToggle={() => setShowBirthday((current) => !current)} id="toggle-birthday" />
                             </div>

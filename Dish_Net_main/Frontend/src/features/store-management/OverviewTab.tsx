@@ -1,9 +1,11 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import OrderDetailView from './OrderDetailView';
 import type { OrderDetailData } from './OrderDetailView';
+import PauseStoreModal, { type PauseStoreConfirmPayload } from './PauseStoreModal';
 import { fmt, storeOrderApi, type StoreOrderDetail } from '@/shared/storeOrderApi';
 import { STORE_OVERVIEW_REFRESH_EVENT } from '@/shared/storeEvents';
 import {
@@ -163,6 +165,18 @@ export default function OverviewTab() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
 
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!actionMessage) return;
+    const t = setTimeout(() => setActionMessage(null), 3500);
+    return () => clearTimeout(t);
+  }, [actionMessage]);
+
   const loadOverview = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
@@ -264,7 +278,10 @@ export default function OverviewTab() {
   const thongKeHomNay = overview?.thong_ke_hom_nay;
   const thongKeTrangThai = overview?.thong_ke_trang_thai_don_hang;
   const topMon = overview?.top_mon_ban_chay_trong_ngay ?? [];
-  const tongThuNhap = overview?.tong_thu_nhap_trong_ngay ?? 0;
+  const tongThuNhap = overview?.tong_thu_nhap_theo_bo_loc ?? overview?.tong_thu_nhap_trong_ngay ?? 0;
+  const tongThuNhapLabel = timeFilter === 'custom'
+    ? 'Tổng thu nhập theo khoảng tùy chọn'
+    : `Tổng thu nhập ${timeFilterLabel.toLowerCase()}`;
 
   return (
     <div>
@@ -341,6 +358,102 @@ export default function OverviewTab() {
         </div>
       </div>
 
+      {actionMessage ? (
+        <div
+          className={`mt-4 rounded-[12px] px-4 py-2.5 text-[14px] font-medium ${
+            actionMessage.kind === 'success'
+              ? 'bg-[#eaf8eb] text-[#285e19]'
+              : 'bg-[#fdecec] text-[#b42318]'
+          }`}
+        >
+          {actionMessage.text}
+        </div>
+      ) : null}
+
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          setIsUploadingAvatar(true);
+          try {
+            await storeOverviewApi.uploadAnhDaiDien(file);
+            setActionMessage({ kind: 'success', text: 'Đã cập nhật ảnh đại diện cửa hàng' });
+            await loadOverview(true);
+          } catch (err) {
+            setActionMessage({
+              kind: 'error',
+              text: err instanceof Error ? err.message : 'Không thể đổi ảnh đại diện',
+            });
+          } finally {
+            setIsUploadingAvatar(false);
+          }
+        }}
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => avatarInputRef.current?.click()}
+          disabled={isUploadingAvatar}
+          className="inline-flex items-center gap-2 rounded-[10px] bg-[#1f89cf] px-4 py-2 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#1777b5] disabled:cursor-wait disabled:opacity-60"
+        >
+          {isUploadingAvatar ? '⏳ Đang tải…' : '📷 Đổi ảnh đại diện'}
+        </button>
+
+        <Link
+          href="/store/menu"
+          className="inline-flex items-center gap-2 rounded-[10px] border border-[#d6d6d6] bg-white px-4 py-2 text-[13px] font-bold text-[#1d1d1d] shadow-sm transition hover:bg-[#fafafa]"
+        >
+          ➕ Thêm món
+        </Link>
+
+        <Link
+          href="/store/promotion"
+          className="inline-flex items-center gap-2 rounded-[10px] bg-[#f0a050] px-4 py-2 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#e08e3a]"
+        >
+          🎁 Tạo khuyến mãi
+        </Link>
+
+        {thongTin?.trang_thai_hoat_dong === 'hoat_dong' ? (
+          <button
+            type="button"
+            disabled={isTogglingStatus}
+            onClick={() => setIsPauseModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-[10px] bg-[#d32f2f] px-4 py-2 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#b71c1c] disabled:cursor-wait disabled:opacity-60"
+          >
+            ⏸ Tạm nghỉ bán
+          </button>
+        ) : thongTin?.trang_thai_hoat_dong === 'tam_nghi' ? (
+          <button
+            type="button"
+            disabled={isTogglingStatus}
+            onClick={async () => {
+              setIsTogglingStatus(true);
+              try {
+                await storeOverviewApi.capNhatTrangThai('hoat_dong');
+                setActionMessage({ kind: 'success', text: 'Đã mở bán trở lại' });
+                await loadOverview(true);
+              } catch (err) {
+                setActionMessage({
+                  kind: 'error',
+                  text: err instanceof Error ? err.message : 'Không thể đổi trạng thái',
+                });
+              } finally {
+                setIsTogglingStatus(false);
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-[10px] bg-[#2e7d32] px-4 py-2 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#256628] disabled:cursor-wait disabled:opacity-60"
+          >
+            ▶ {isTogglingStatus ? 'Đang xử lý…' : 'Mở bán trở lại'}
+          </button>
+        ) : null}
+      </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-[16px] bg-white p-5 shadow-sm">
           <h3 className="text-[16px] font-bold text-black">Quản lý đơn hàng</h3>
@@ -413,7 +526,7 @@ export default function OverviewTab() {
 
       <div className="mt-6 rounded-[16px] bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
-          <h3 className="pt-1 text-[16px] font-bold uppercase text-black">ĐƠN HÀNG TRONG HÔM NAY</h3>
+          <h3 className="pt-1 text-[16px] font-bold uppercase text-black">ĐƠN HÀNG {timeFilter === 'custom' ? 'THEO KHOẢNG TÙY CHỌN' : `TRONG ${timeFilterLabel.toUpperCase()}`}</h3>
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -585,10 +698,37 @@ export default function OverviewTab() {
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-[#e8e8e8] pt-4">
-          <span className="text-[15px] font-bold text-black">Tổng thu nhập hôm nay</span>
+          <span className="text-[15px] font-bold text-black">{tongThuNhapLabel}</span>
           <span className="text-[22px] font-bold text-[#d32f2f]">{loading ? '...' : fmt(tongThuNhap)}</span>
         </div>
       </div>
+
+      <PauseStoreModal
+        open={isPauseModalOpen}
+        isSubmitting={isTogglingStatus}
+        onClose={() => {
+          if (!isTogglingStatus) setIsPauseModalOpen(false);
+        }}
+        onConfirm={async (payload: PauseStoreConfirmPayload) => {
+          setIsTogglingStatus(true);
+          try {
+            await storeOverviewApi.capNhatTrangThai('tam_nghi');
+            const successText = payload.mode === 'scheduled' && payload.tu_ngay && payload.den_ngay
+              ? `Đã tạm nghỉ bán từ ${new Date(payload.tu_ngay).toLocaleString('vi-VN')} đến ${new Date(payload.den_ngay).toLocaleString('vi-VN')}`
+              : 'Đã chuyển sang trạng thái Tạm nghỉ bán';
+            setActionMessage({ kind: 'success', text: successText });
+            setIsPauseModalOpen(false);
+            await loadOverview(true);
+          } catch (err) {
+            setActionMessage({
+              kind: 'error',
+              text: err instanceof Error ? err.message : 'Không thể đổi trạng thái',
+            });
+          } finally {
+            setIsTogglingStatus(false);
+          }
+        }}
+      />
     </div>
   );
 }

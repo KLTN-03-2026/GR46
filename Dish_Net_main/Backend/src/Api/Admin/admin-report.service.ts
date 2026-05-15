@@ -344,7 +344,9 @@ export class AdminReportService {
             baiViet?.noi_dung ||
             baoCao.bang_chung_text ||
             baoCao.noi_dung_bao_cao,
-          url: this.taoUrlDoiTuong(baoCao),
+          url: this.taoUrlDoiTuong(baoCao, {
+            idTacGia: baiViet?.id_nguoi_dang ?? null,
+          }),
         };
       }
       case "binh_luan": {
@@ -358,7 +360,9 @@ export class AdminReportService {
             binhLuan?.noi_dung ||
             baoCao.bang_chung_text ||
             baoCao.noi_dung_bao_cao,
-          url: this.taoUrlDoiTuong(baoCao),
+          url: this.taoUrlDoiTuong(baoCao, {
+            idTacGia: binhLuan?.id_nguoi_binh_luan ?? null,
+          }),
         };
       }
       case "mon_an": {
@@ -370,7 +374,9 @@ export class AdminReportService {
           tac_gia: baoCao.nguoi_vi_pham?.ten_hien_thi ?? "Không xác định",
           mo_ta:
             monAn?.mo_ta || baoCao.bang_chung_text || baoCao.noi_dung_bao_cao,
-          url: this.taoUrlDoiTuong(baoCao),
+          url: this.taoUrlDoiTuong(baoCao, {
+            idCuaHang: monAn?.id_cua_hang ?? null,
+          }),
         };
       }
       case "cua_hang": {
@@ -465,18 +471,32 @@ export class AdminReportService {
     return `${label} #${baoCao.id_doi_tuong_bi_bao_cao}`;
   }
 
-  private taoUrlDoiTuong(baoCao: BaoCaoEntity) {
+  private taoUrlDoiTuong(
+    baoCao: BaoCaoEntity,
+    extras?: { idTacGia?: number | null; idCuaHang?: number | null },
+  ) {
     switch (baoCao.loai_doi_tuong_bi_bao_cao) {
       case "bai_viet":
-        return `/posts/${baoCao.id_doi_tuong_bi_bao_cao}`;
+      case "binh_luan": {
+        const idTacGia =
+          extras?.idTacGia != null
+            ? Number(extras.idTacGia)
+            : baoCao.id_nguoi_vi_pham != null
+              ? Number(baoCao.id_nguoi_vi_pham)
+              : null;
+        return idTacGia ? `/profile/${idTacGia}` : null;
+      }
       case "cua_hang":
-        return `/store/${baoCao.id_doi_tuong_bi_bao_cao}`;
-      case "mon_an":
-        return `/food/${baoCao.id_doi_tuong_bi_bao_cao}`;
+        return `/explore/store/${baoCao.id_doi_tuong_bi_bao_cao}`;
+      case "mon_an": {
+        const idCuaHang =
+          extras?.idCuaHang != null ? Number(extras.idCuaHang) : null;
+        return idCuaHang
+          ? `/explore/store/${idCuaHang}/menu`
+          : null;
+      }
       case "nguoi_dung":
         return `/profile/${baoCao.id_doi_tuong_bi_bao_cao}`;
-      case "binh_luan":
-        return `/comments/${baoCao.id_doi_tuong_bi_bao_cao}`;
       default:
         return null;
     }

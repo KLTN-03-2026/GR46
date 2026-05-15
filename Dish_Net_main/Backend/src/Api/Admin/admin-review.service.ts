@@ -7,6 +7,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EmailService } from "../../shared/email/email.service";
 import { NguoiDungEntity } from "../Auth/entities/nguoi-dung.entity";
+import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entity";
+import { BaiVietEntity } from "./entities/bai-viet.entity";
 import { CuaHangEntity } from "./entities/cua-hang.entity";
 import { NhatKyHeThongEntity } from "./entities/nhat-ky-he-thong.entity";
 import { TepDinhKemEntity } from "./entities/tep-dinh-kem.entity";
@@ -37,6 +39,10 @@ export class AdminReviewService {
     private readonly tepDinhKemRepo: Repository<TepDinhKemEntity>,
     @InjectRepository(NhatKyHeThongEntity)
     private readonly nhatKyRepo: Repository<NhatKyHeThongEntity>,
+    @InjectRepository(BaiVietEntity)
+    private readonly baiVietRepo: Repository<BaiVietEntity>,
+    @InjectRepository(QuanHeNguoiDungEntity)
+    private readonly quanHeRepo: Repository<QuanHeNguoiDungEntity>,
     private readonly emailService: EmailService,
   ) {}
 
@@ -108,31 +114,55 @@ export class AdminReviewService {
     });
 
     if (!yc) {
-      throw new NotFoundException("Yeu cau khong ton tai");
+      throw new NotFoundException("Yêu cầu không tồn tại");
     }
 
-    const [tepMinhChung, lichSu] = await Promise.all([
-      this.tepDinhKemRepo.find({
-        where: {
-          loai_doi_tuong: "yeu_cau_nang_cap",
-          id_doi_tuong: id,
-        },
-        order: {
-          thu_tu_hien_thi: "ASC",
-          id: "ASC",
-        },
-      }),
-      this.nhatKyRepo.find({
-        where: {
-          loai_doi_tuong: "yeu_cau_nang_cap",
-          id_doi_tuong: id,
-        },
-        relations: {
-          nguoi_thuc_hien: true,
-        },
-        order: { ngay_tao: "ASC" },
-      }),
-    ]);
+    const laYeuCauKiemTienNoiDung = yc.loai_yeu_cau === "kiem_tien_noi_dung";
+
+    const [tepMinhChung, lichSu, soBaiDangThucTe, soNguoiTheoDoiThucTe] =
+      await Promise.all([
+        this.tepDinhKemRepo.find({
+          where: {
+            loai_doi_tuong: "yeu_cau_nang_cap",
+            id_doi_tuong: id,
+          },
+          order: {
+            thu_tu_hien_thi: "ASC",
+            id: "ASC",
+          },
+        }),
+        this.nhatKyRepo.find({
+          where: {
+            loai_doi_tuong: "yeu_cau_nang_cap",
+            id_doi_tuong: id,
+          },
+          relations: {
+            nguoi_thuc_hien: true,
+          },
+          order: { ngay_tao: "ASC" },
+        }),
+        laYeuCauKiemTienNoiDung
+          ? this.baiVietRepo
+              .createQueryBuilder("bv")
+              .where("bv.id_nguoi_dang = :idNguoiDung", {
+                idNguoiDung: yc.nguoi_gui.id,
+              })
+              .andWhere("bv.trang_thai_hien_thi = :trangThai", {
+                trangThai: "hien_thi",
+              })
+              .getCount()
+          : Promise.resolve(0),
+        laYeuCauKiemTienNoiDung
+          ? this.quanHeRepo
+              .createQueryBuilder("qh")
+              .where("qh.id_nguoi_nhan_quan_he = :idNguoiDung", {
+                idNguoiDung: yc.nguoi_gui.id,
+              })
+              .andWhere("qh.loai_quan_he = :loai", { loai: "theo_doi" })
+              .andWhere("qh.trang_thai = :trangThai", { trangThai: "hieu_luc" })
+              .getCount()
+          : Promise.resolve(0),
+      ]);
 
     const videos = tepMinhChung
       .filter((tep) => tep.loai_tep === "video")
@@ -171,16 +201,15 @@ export class AdminReviewService {
               mo_ta_cua_hang: yc.ly_do_yeu_cau,
             }
           : null,
-      thong_tin_kiem_tien_noi_dung:
-        yc.loai_yeu_cau === "kiem_tien_noi_dung"
-          ? {
-              ten_kenh: yc.ten_kenh,
-              mo_ta_noi_dung_kenh: yc.mo_ta_kenh,
-              so_bai_dang: yc.tong_bai_dang,
-              so_nguoi_theo_doi: yc.tong_nguoi_theo_doi,
-              video_noi_bat: videos,
-            }
-          : null,
+      thong_tin_kiem_tien_noi_dung: laYeuCauKiemTienNoiDung
+        ? {
+            ten_kenh: yc.ten_kenh,
+            mo_ta_noi_dung_kenh: yc.mo_ta_kenh,
+            so_bai_dang: soBaiDangThucTe,
+            so_nguoi_theo_doi: soNguoiTheoDoiThucTe,
+            video_noi_bat: videos,
+          }
+        : null,
       tep_minh_chung: tepMinhChung.map((tep) => ({
         id: tep.id,
         loai_tep: tep.loai_tep,
@@ -226,12 +255,12 @@ export class AdminReviewService {
       });
 
       if (!yc) {
-        throw new NotFoundException("Yeu cau khong ton tai");
+        throw new NotFoundException("Yêu cầu không tồn tại");
       }
 
       if (yc.trang_thai !== "cho_duyet") {
         throw new BadRequestException(
-          "Chi co the phe duyet yeu cau dang cho duyet",
+          "Chỉ có thể phê duyệt yêu cầu đang chờ duyệt",
         );
       }
 
@@ -299,7 +328,7 @@ export class AdminReviewService {
     diaChiIp?: string | null,
   ) {
     if (!lyDo.trim()) {
-      throw new BadRequestException("Ly do tu choi khong duoc de trong");
+      throw new BadRequestException("Lý do từ chối không được để trống");
     }
 
     let duLieuEmail:
@@ -323,12 +352,12 @@ export class AdminReviewService {
         relations: { nguoi_gui: true },
       });
       if (!yc) {
-        throw new NotFoundException("Yeu cau khong ton tai");
+        throw new NotFoundException("Yêu cầu không tồn tại");
       }
 
       if (yc.trang_thai !== "cho_duyet") {
         throw new BadRequestException(
-          "Chi co the tu choi yeu cau dang cho duyet",
+          "Chỉ có thể từ chối yêu cầu đang chờ duyệt",
         );
       }
 
@@ -554,7 +583,7 @@ export class AdminReviewService {
       case "custom": {
         if (!query.tu_ngay || !query.den_ngay) {
           throw new BadRequestException(
-            "Vui long chon day du tu ngay va den ngay",
+            "Vui lòng chọn đầy đủ Từ ngày và Đến ngày",
           );
         }
 
@@ -562,11 +591,13 @@ export class AdminReviewService {
         const denNgay = new Date(`${query.den_ngay}T23:59:59`);
 
         if (Number.isNaN(tuNgay.getTime()) || Number.isNaN(denNgay.getTime())) {
-          throw new BadRequestException("Khoang thoi gian khong hop le");
+          throw new BadRequestException("Khoảng thời gian không hợp lệ");
         }
 
         if (tuNgay > denNgay) {
-          throw new BadRequestException("Tu ngay khong duoc lon hon den ngay");
+          throw new BadRequestException(
+            "Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu",
+          );
         }
 
         return { tuNgay, denNgay };

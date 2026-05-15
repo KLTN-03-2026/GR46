@@ -60,10 +60,16 @@ export default function RegisterVerifyPage() {
     };
 
     const handleResend = async () => {
+        if (countdown > 0 || loading) return;
         try {
             await authApi.guiLaiOtp({ email, loai_xac_thuc: 'dang_ky' });
+            setOtp(['', '', '', '', '', '']);
+            setSubmitted(false);
+            setServerError('');
             setCountdown(120);
-        } catch {}
+        } catch (err: unknown) {
+            setServerError(err instanceof Error ? err.message : 'Gửi lại mã thất bại');
+        }
     };
 
     const handleSubmit = async (event: FormEvent) => {
@@ -125,11 +131,14 @@ export default function RegisterVerifyPage() {
                         <p className="mb-6 mt-2 text-center text-[13px] text-[#9aa1a9]">
                             Mã xác nhận chỉ có hiệu lực trong vòng 02 phút.{' '}
                             <span className="font-bold text-[#285E19]">{formatTime(countdown)}</span>
-                            {countdown === 0 && (
-                                <button type="button" onClick={handleResend} className="ml-2 font-bold text-[#3b82f6] hover:underline">
-                                    Gửi lại
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                onClick={handleResend}
+                                disabled={countdown > 0 || loading}
+                                className="ml-2 font-bold text-[#3b82f6] hover:underline disabled:cursor-not-allowed disabled:text-[#b8bfc8] disabled:no-underline"
+                            >
+                                Gửi lại
+                            </button>
                         </p>
 
                         <button type="submit" disabled={loading}

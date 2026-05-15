@@ -1521,6 +1521,12 @@ export class UserCommerceService {
 
       const maDonHang = this.taoMa('DH');
 
+      // ─── Tính hoa hồng nhà sáng tạo theo last-click attribution ───
+      const attribution = await this.tinhHoaHongNhaSangTao(
+        Number(session.id_nguoi_dung),
+        group.items,
+      );
+
       const order = await this.donHangRepo.save({
         ma_don_hang: maDonHang,
         id_nguoi_mua: Number(session.id_nguoi_dung),
@@ -1529,18 +1535,18 @@ export class UserCommerceService {
         so_dien_thoai_nhan: snapshot.so_dien_thoai_nhan,
         dia_chi_giao: snapshot.dia_chi_giao,
         ghi_chu_tai_xe: snapshot.ghi_chu_tai_xe,
-        nguon_don_hang: 'truc_tiep',
-        id_bai_viet_nguon: null,
-        id_nha_sang_tao_nguon: null,
+        nguon_don_hang: attribution.idNhaSangTao ? 'bai_viet' : 'truc_tiep',
+        id_bai_viet_nguon: attribution.idBaiViet,
+        id_nha_sang_tao_nguon: attribution.idNhaSangTao,
         phuong_thuc_thanh_toan: 'vnpay',
         trang_thai_don_hang: 'cho_xac_nhan',
         tam_tinh: group.tam_tinh,
         phi_van_chuyen: group.phi_van_chuyen,
         tong_giam_gia: giamGiaNhom,
         tong_thanh_toan: group.tam_tinh + group.phi_van_chuyen - giamGiaNhom,
-        thu_nhap_cua_hang: group.tam_tinh - giamGiaNhom,
+        thu_nhap_cua_hang: group.tam_tinh - giamGiaNhom - attribution.tongHoaHong,
         hoa_hong_nen_tang: 0,
-        hoa_hong_nha_sang_tao: 0,
+        hoa_hong_nha_sang_tao: attribution.tongHoaHong,
         ly_do_huy: null,
         ly_do_tra_hang: null,
         nguoi_huy: null,
@@ -1601,6 +1607,14 @@ export class UserCommerceService {
         ma_don_hang: order.ma_don_hang,
         id_cua_hang: Number(order.id_cua_hang),
       });
+    }
+
+    if (snapshot.khuyen_mai && snapshot.tong_tien.giam_gia > 0) {
+      await this.khuyenMaiRepo.increment(
+        { id: snapshot.khuyen_mai.id },
+        'so_luot_da_dung',
+        1,
+      );
     }
 
     const cartItemIds = [
@@ -1790,6 +1804,7 @@ export class UserCommerceService {
           ma_don_hang: item.ma_don_hang,
           ten_cua_hang: store?.ten_cua_hang ?? 'Cửa hàng',
           id_cua_hang: Number(item.id_cua_hang),
+          id_chu_cua_hang: store?.id_chu_so_huu != null ? Number(store.id_chu_so_huu) : null,
           ten_mon: firstItem?.ten_mon_snapshot ?? 'Món ăn',
           hinh_anh_mon: firstItem?.hinh_anh_snapshot ?? null,
           so_luong_mon: firstItem ? Number(firstItem.so_luong) : 0,
@@ -1872,6 +1887,7 @@ export class UserCommerceService {
       },
       thong_tin_cua_hang: {
         id: store ? Number(store.id) : Number(order.id_cua_hang),
+        id_chu_so_huu: store?.id_chu_so_huu != null ? Number(store.id_chu_so_huu) : null,
         ten_cua_hang: store?.ten_cua_hang ?? 'Cửa hàng',
         dia_chi: store?.dia_chi_kinh_doanh ?? null,
       },
@@ -2130,6 +2146,86 @@ export class UserCommerceService {
       message: 'Đã xác nhận nhận hàng thành công',
       trang_thai_moi: 'da_giao',
       thoi_gian_hoan_tat: now,
+    };
+  }
+
+  /**
+   * Tính hoa hồng nhà sáng tạo theo last-click attribution (7 ngày).
+   * - Mỗi món trong đơn: tìm bài viết creator gần nhất khách click trong cửa sổ 7 ngày.
+   *   Bài đó phải có id_mon_an khớp món đang đặt và creator khác chính khách.
+   * - Commission = 5% của line total (thanh_tien) của món đó.
+   * - id_nha_sang_tao_nguon + id_bai_viet_nguon: chọn creator có tổng commission cao nhất.
+   */
+  private async tinhHoaHongNhaSangTao(
+    userId: number,
+    items: Array<{ id_mon_an?: number | null; thanh_tien: number }>,
+  ): Promise<{
+    tongHoaHong: number;
+    idBaiViet: number | null;
+    idNhaSangTao: number | null;
+  }> {
+    const COMMISSION_RATE = 0.05;
+    const WINDOW_DAYS = 7;
+    const since = new Date(Date.now() - WINDOW_DAYS * 86400_000);
+
+    const byCreator = new Map<number, { totalCommission: number; idBaiViet: number }>();
+    let tongHoaHong = 0;
+
+    for (const item of items) {
+      const idMonAn = item.id_mon_an != null ? Number(item.id_mon_an) : null;
+      if (!idMonAn || !Number.isFinite(idMonAn) || item.thanh_tien <= 0) continue;
+
+      const lastClick = await this.donHangRepo.manager
+        .createQueryBuilder()
+        .from('luot_nhan_link_bai_viet', 'lnl')
+        .innerJoin('bai_viet', 'bv', 'bv.id = lnl.id_bai_viet')
+        .select('lnl.id_bai_viet', 'id_bai_viet')
+        .addSelect('bv.id_nguoi_dang', 'id_nguoi_dang')
+        .where('lnl.id_nguoi_dung = :userId', { userId })
+        .andWhere('bv.id_mon_an = :idMon', { idMon: idMonAn })
+        .andWhere('lnl.ngay_tao >= :since', { since })
+        .andWhere('bv.id_nguoi_dang <> :userId', { userId })
+        .andWhere('bv.trang_thai_duyet = :trangThai', { trangThai: 'hien_thi' })
+        .orderBy('lnl.ngay_tao', 'DESC')
+        .limit(1)
+        .getRawOne();
+
+      if (!lastClick) continue;
+
+      const idBaiViet = Number(lastClick.id_bai_viet);
+      const idCreator = Number(lastClick.id_nguoi_dang);
+      const commission = Math.round(item.thanh_tien * COMMISSION_RATE);
+      if (commission <= 0) continue;
+
+      tongHoaHong += commission;
+      const existing = byCreator.get(idCreator);
+      if (existing) {
+        existing.totalCommission += commission;
+      } else {
+        byCreator.set(idCreator, { totalCommission: commission, idBaiViet });
+      }
+    }
+
+    if (byCreator.size === 0) {
+      return { tongHoaHong: 0, idBaiViet: null, idNhaSangTao: null };
+    }
+
+    // Creator chiếm tổng commission lớn nhất trong đơn → ghi nhận là nguồn chính
+    let winningCreator: number | null = null;
+    let winningPost: number | null = null;
+    let maxTotal = 0;
+    for (const [creatorId, info] of byCreator) {
+      if (info.totalCommission > maxTotal) {
+        maxTotal = info.totalCommission;
+        winningCreator = creatorId;
+        winningPost = info.idBaiViet;
+      }
+    }
+
+    return {
+      tongHoaHong,
+      idBaiViet: winningPost,
+      idNhaSangTao: winningCreator,
     };
   }
 

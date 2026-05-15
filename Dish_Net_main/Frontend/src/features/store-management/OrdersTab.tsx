@@ -11,6 +11,7 @@ import {
   fmt,
   fmtPhone,
 } from '@/shared/storeOrderApi';
+import { userCommerceApi } from '@/shared/userCommerceApi';
 
 /* ═══════════════════════════════════════════
    TYPES
@@ -20,6 +21,7 @@ type OrderTabKey = 'pending' | 'preparing' | 'delivering' | 'delivered' | 'cance
 interface StoreOrder {
   id: string;
   ma_don_hang: string;
+  id_nguoi_mua?: number;
   khach_hang: string;
   khach_hinh?: string;
   khach_sdt: string;
@@ -175,6 +177,7 @@ function mapApiOrder(item: StoreOrderItem, apiItems: StoreOrderDetail['danh_sach
   return {
     id: String(item.id),
     ma_don_hang: item.ma_don_hang,
+    id_nguoi_mua: item.id_nguoi_mua,
     khach_hang: item.khach_hang,
     khach_hinh: item.anh_dai_dien_khach ?? undefined,
     khach_sdt: fmtPhone(item.so_dien_thoai_khach),
@@ -579,21 +582,25 @@ function OrderCard({
   onConfirm,
   onReject,
   onDeliver,
+  onComplete,
   onExtend,
   onViewReview,
   onViewDetail,
   onApproveRefund,
   onRejectRefund,
+  onChatCustomer,
 }: {
   order: StoreOrder;
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
   onDeliver: (id: string) => void;
+  onComplete: (id: string) => void;
   onExtend: (id: string) => void;
   onViewReview: (id: string) => void;
   onViewDetail: (id: string) => void;
   onApproveRefund: (id: string) => void;
   onRejectRefund: (id: string) => void;
+  onChatCustomer: (id: string) => void;
 }) {
   const tagColor = order.tag === 'Mới' ? 'bg-[#2e7d32] text-white' : order.tag === 'Sắp trễ' ? 'bg-[#f0a050] text-white' : 'bg-[#d32f2f] text-white';
   const badge = STATUS_BADGE[order.status];
@@ -660,10 +667,26 @@ function OrderCard({
             <div className="mt-2 flex gap-1.5">
               <button type="button" onClick={() => onDeliver(order.id)} className="rounded-[6px] bg-[#2e7d32] px-4 py-1.5 text-[12px] font-bold uppercase text-white transition hover:bg-[#256b28]">GIAO</button>
               <button type="button" onClick={() => onExtend(order.id)} className="rounded-[6px] border border-[#2e7d32] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#2e7d32] transition hover:bg-[#f6faf4]">Gia hạn</button>
+              <button type="button" onClick={() => onChatCustomer(order.id)} className="rounded-[6px] border border-[#1f89cf] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1f89cf] transition hover:bg-[#eaf4fb]">💬</button>
             </div>
           )}
           {order.status === 'delivering' && (
-            <button type="button" disabled className="mt-2 cursor-not-allowed rounded-[6px] bg-[#333] px-4 py-1.5 text-[12px] font-semibold text-white opacity-90">Chờ khách xác nhận</button>
+            <div className="mt-2 flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => onComplete(order.id)}
+                className="rounded-[6px] bg-[#2e7d32] px-4 py-1.5 text-[12px] font-bold uppercase text-white transition hover:bg-[#256b28]"
+              >
+                Hoàn thành
+              </button>
+              <button
+                type="button"
+                onClick={() => onChatCustomer(order.id)}
+                className="rounded-[6px] border border-[#1f89cf] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1f89cf] transition hover:bg-[#eaf4fb]"
+              >
+                💬 Nhắn tin
+              </button>
+            </div>
           )}
           {order.status === 'delivered' && order.review && (
             <button type="button" onClick={() => onViewReview(order.id)} className="mt-2 rounded-[6px] border border-[#d32f2f] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#d32f2f] transition hover:bg-[#fff3f3]">Xem đánh giá khách hàng</button>
@@ -1018,6 +1041,32 @@ export default function OrdersTab() {
     }
   };
 
+  const handleComplete = async (id: string) => {
+    const order = orders.find((o) => o.id === id);
+    if (!order) return;
+    if (!window.confirm('Đánh dấu đơn hàng này là đã hoàn thành?')) return;
+    try {
+      await storeOrderApi.hoanThanhDonHang(order.ma_don_hang);
+      loadOrders(currentPage);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Hoàn thành đơn thất bại');
+    }
+  };
+
+  const handleChatCustomer = async (id: string) => {
+    const order = orders.find((o) => o.id === id);
+    if (!order?.id_nguoi_mua) {
+      alert('Không xác định được khách hàng để nhắn tin');
+      return;
+    }
+    try {
+      await userCommerceApi.batDauTroChuyen(Number(order.id_nguoi_mua));
+      window.location.href = '/messages';
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Không thể bắt đầu trò chuyện');
+    }
+  };
+
   const handleExtend = async (id: string, time: string) => {
     const order = orders.find((o) => o.id === id);
     if (!order) return;
@@ -1195,11 +1244,13 @@ export default function OrdersTab() {
             onConfirm={(id) => { const o = orders.find((x) => x.id === id); if (o) setConfirmOrder(o); }}
             onReject={(id) => { const o = orders.find((x) => x.id === id); if (o) setRejectOrder(o); }}
             onDeliver={handleDeliver}
+            onComplete={handleComplete}
             onExtend={(id) => { const o = orders.find((x) => x.id === id); if (o) setExtendOrder(o); }}
             onViewReview={(id) => { const o = orders.find((x) => x.id === id); if (o) setReviewOrder(o); }}
             onViewDetail={handleViewDetail}
             onApproveRefund={handleApproveRefund}
             onRejectRefund={(id) => { const o = orders.find((x) => x.id === id); if (o) setRejectRefundOrder(o); }}
+            onChatCustomer={handleChatCustomer}
           />
         ))}
       </div>

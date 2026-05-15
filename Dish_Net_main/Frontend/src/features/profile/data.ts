@@ -20,6 +20,7 @@ export type UserProfile = {
     showBadge: boolean;
     showTrustScore: boolean;
     isPrivate: boolean;
+    isFollowingByMe?: boolean;
     posts: ProfilePost[];
     reposts: ProfilePost[];
     videos: ProfileVideo[];
@@ -242,6 +243,10 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
                 type: item.loai_bai_viet ?? 'bai_viet',
                 monetized: Boolean(item.bat_kiem_tien),
                 dishLink: item.link_mon_an ?? null,
+                dishImage: typeof item.hinh_anh_mon_an === 'string' ? item.hinh_anh_mon_an : null,
+                storeAvatar: typeof item.anh_dai_dien_cua_hang_lien_ket === 'string'
+                    ? item.anh_dai_dien_cua_hang_lien_ket
+                    : null,
             }))
             : [];
         const apiReposts = Array.isArray(repostPayload?.du_lieu)
@@ -295,7 +300,11 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
                     .map((post: any) => ({
                         id: post.id,
                         title: post.content ? post.content.slice(0, 50) : 'Bài viết kiếm tiền',
-                        image: post.images[0] ?? DEFAULT_AVATAR,
+                        image:
+                            (post.images?.[0] as string | undefined) ||
+                            (post.dishImage as string | null) ||
+                            (post.storeAvatar as string | null) ||
+                            DEFAULT_AVATAR,
                         views: String(post.views ?? '0'),
                         interactions: String(Number(post.likes) + Number(post.comments) + Number(post.shares)),
                         revenue: '0đ',
@@ -355,6 +364,112 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
         };
     } catch {
         return emptyProfileFromAuth(me);
+    }
+}
+
+export async function getCurrentUserId(): Promise<number | null> {
+    try {
+        const me = await requestWithAuthCookie<any>('/auth/toi');
+        const id = Number(me?.id);
+        return Number.isFinite(id) && id > 0 ? id : null;
+    } catch {
+        return null;
+    }
+}
+
+export async function getUserProfileById(id: number): Promise<UserProfile | null> {
+    try {
+        const [profilePayload, postPayload, videoPayload, repostPayload] = await Promise.all([
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${id}`),
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${id}/noi-dung?tab=bai_viet&trang=1&so_luong=20`),
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${id}/noi-dung?tab=video&trang=1&so_luong=20`),
+            requestWithAuthCookie<any>(`/user/trang-ca-nhan/${id}/noi-dung?tab=bai_dang_lai&trang=1&so_luong=20`),
+        ]);
+
+        const basic = profilePayload?.thong_tin_co_ban ?? null;
+        if (!basic) return null;
+
+        const apiPosts = Array.isArray(postPayload?.du_lieu)
+            ? postPayload.du_lieu.map((item: any) => ({
+                id: String(item.id),
+                date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+                content: String(item.noi_dung ?? ''),
+                images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0),
+                visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
+                likes: String(item.tong_luot_thich ?? 0),
+                comments: String(item.tong_luot_binh_luan ?? 0),
+                shares: String(item.tong_luot_chia_se ?? 0),
+                sends: '0',
+                type: item.loai_bai_viet ?? 'bai_viet',
+                monetized: Boolean(item.bat_kiem_tien),
+                dishLink: item.link_mon_an ?? null,
+                dishImage: typeof item.hinh_anh_mon_an === 'string' ? item.hinh_anh_mon_an : null,
+                storeAvatar: typeof item.anh_dai_dien_cua_hang_lien_ket === 'string'
+                    ? item.anh_dai_dien_cua_hang_lien_ket
+                    : null,
+            }))
+            : [];
+        const apiReposts = Array.isArray(repostPayload?.du_lieu)
+            ? repostPayload.du_lieu.map((item: any) => ({
+                id: String(item.id),
+                date: item.ngay_dang ? new Date(item.ngay_dang).toLocaleDateString('vi-VN') : '',
+                content: String(item.noi_dung ?? ''),
+                images: extractMediaUrls(item.tep_dinh_kem),
+                views: String(item.tong_luot_xem ?? 0),
+                visibility: item.muc_do_hien_thi === 'ban_be' ? 'ban_be' : 'cong_khai',
+                likes: String(item.tong_luot_thich ?? 0),
+                comments: String(item.tong_luot_binh_luan ?? 0),
+                shares: String(item.tong_luot_chia_se ?? 0),
+                sends: '0',
+                type: item.loai_bai_viet ?? 'repost',
+                sharedPost: item.bai_viet_goc
+                    ? {
+                        id: String(item.bai_viet_goc.id),
+                        author: String(item.bai_viet_goc?.thong_tin_nguoi_dang?.ten_hien_thi ?? 'Người dùng'),
+                        date: item.bai_viet_goc?.ngay_dang ? new Date(item.bai_viet_goc.ngay_dang).toLocaleDateString('vi-VN') : '',
+                        content: String(item.bai_viet_goc?.noi_dung ?? ''),
+                        images: extractMediaUrls(item.bai_viet_goc?.tep_dinh_kem),
+                    }
+                    : undefined,
+            }))
+            : [];
+        const apiVideos = Array.isArray(videoPayload?.du_lieu)
+            ? videoPayload.du_lieu.map((item: any) => ({
+                id: String(item.id),
+                image: (extractMediaUrls(item.tep_dinh_kem)[0] ?? null) || DEFAULT_AVATAR,
+                views: String(item.tong_luot_thich ?? 0),
+            }))
+            : [];
+
+        return {
+            id: String(id),
+            name: String(basic.ten_hien_thi ?? 'Người dùng'),
+            handle: String(basic.ten_tai_khoan ?? 'user'),
+            avatar: String(basic.anh_dai_dien ?? DEFAULT_AVATAR),
+            gender: '',
+            birthday: '',
+            bio: String(basic.tieu_su ?? ''),
+            email: '',
+            phone: '',
+            address: '',
+            trustScore: String(basic.diem_uy_tin ?? 0),
+            postsCount: String(basic.so_bai_viet ?? apiPosts.length),
+            followers: String(basic.so_nguoi_theo_doi ?? 0),
+            following: String(basic.so_nguoi_dang_theo_doi ?? 0),
+            isTopReviewer: false,
+            showBadge: Boolean(basic.cho_hien_thi_huy_hieu ?? true),
+            showTrustScore: Boolean(basic.cho_hien_thi_diem_uy_tin ?? true),
+            isPrivate: Boolean(basic.la_tai_khoan_rieng_tu),
+            isFollowingByMe: Boolean(basic.dang_theo_doi),
+            isMonetized: false,
+            posts: apiPosts,
+            reposts: apiReposts,
+            videos: apiVideos,
+            earnings: EMPTY_EARNINGS,
+        };
+    } catch {
+        return null;
     }
 }
 

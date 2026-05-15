@@ -183,11 +183,16 @@ export default function ForgotPasswordPage() {
     };
 
     const handleResend = async () => {
+        if (countdown > 0 || loading) return;
         try {
             await authApi.guiLaiOtp({ email, loai_xac_thuc: 'quen_mat_khau' });
-            setCountdown(120);
+            setOtp(['', '', '', '', '', '']);
+            setSubmitted(false);
             setServerError('');
-        } catch {}
+            setCountdown(120);
+        } catch (error: unknown) {
+            setServerError(getErrorMessage(error, 'Gửi lại mã thất bại'));
+        }
     };
 
     return (
@@ -241,9 +246,14 @@ export default function ForgotPasswordPage() {
                                 <p className="mb-6 mt-2 text-center text-[13px] text-[#9aa1a9]">
                                     Mã xác nhận chỉ có hiệu lực trong vòng 02 phút.{' '}
                                     <span className="font-bold text-[#285E19]">{formatTime(countdown)}</span>
-                                    {countdown === 0 && (
-                                        <button type="button" onClick={handleResend} className="ml-2 font-bold text-[#3b82f6] hover:underline">Gửi lại</button>
-                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleResend}
+                                        disabled={countdown > 0 || loading}
+                                        className="ml-2 font-bold text-[#3b82f6] hover:underline disabled:cursor-not-allowed disabled:text-[#b8bfc8] disabled:no-underline"
+                                    >
+                                        Gửi lại
+                                    </button>
                                 </p>
                                 <button type="submit" disabled={loading}
                                     className="h-[46px] w-full rounded-[6px] bg-[#61AF5E] text-[15px] font-bold uppercase tracking-[0.04em] text-white transition hover:bg-[#4e9a4b] disabled:opacity-60">
