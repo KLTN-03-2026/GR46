@@ -293,6 +293,18 @@ export class AdminReviewService {
       if (yc.loai_yeu_cau === "kiem_tien_noi_dung") {
         yc.nguoi_gui.la_nha_sang_tao = true;
         yc.nguoi_gui.trang_thai_kiem_tien_noi_dung = "da_duyet";
+
+        await thongBaoRepo.save({
+          id_nguoi_nhan: Number(yc.id_nguoi_gui),
+          loai_thong_bao: "he_thong",
+          loai_doi_tuong: "yeu_cau_nang_cap",
+          id_doi_tuong: Number(yc.id),
+          tieu_de: "Đăng ký kiếm tiền nội dung đã được phê duyệt",
+          noi_dung: `Chúc mừng! Tài khoản của bạn đã được phê duyệt trở thành Nhà sáng tạo nội dung. Bạn có thể bắt đầu đăng bài và kiếm tiền trên DishNet.`,
+          da_doc: false,
+          thoi_gian_doc: null,
+          ngay_tao: new Date(),
+        });
       }
 
       yc.trang_thai = "da_duyet";

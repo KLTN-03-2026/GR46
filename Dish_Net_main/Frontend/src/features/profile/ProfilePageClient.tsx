@@ -2182,7 +2182,7 @@ export default function ProfilePageClient({
                     </div>
                 </div>
 
-                {activeTab === 'posts' && canEdit ? (
+                {activeTab === 'posts' && canEdit && (nguoiDung?.la_nha_sang_tao || nguoiDung?.trang_thai_kiem_tien_noi_dung === 'da_duyet') ? (
                     <CreatePostBox profile={profile} onClick={() => {
                         setEditingPost(null);
                         setIsCreatePostModalOpen(true);
@@ -2480,7 +2480,7 @@ export default function ProfilePageClient({
                         </div>
                     </div>
                 )}
-                {isCreatePostModalOpen && canEdit ? (
+                {isCreatePostModalOpen && canEdit && (nguoiDung?.la_nha_sang_tao || nguoiDung?.trang_thai_kiem_tien_noi_dung === 'da_duyet') ? (
                     <CreatePostModal
                         profile={profile}
                         onClose={() => {
