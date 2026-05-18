@@ -329,7 +329,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile> {
                         status:
                             item.trang_thai === 'da_hoan_thanh'
                                 ? 'completed'
-                                : item.trang_thai === 'bi_tu_choi'
+                                : item.trang_thai === 'da_tu_choi'
                                     ? 'rejected'
                                     : 'processing',
                     }))

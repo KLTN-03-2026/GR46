@@ -35,6 +35,10 @@ import { DonHangEntity } from "./entities/don-hang.entity";
 import { DonHangChiTietEntity } from "./entities/don-hang-chi-tiet.entity";
 import { LichSuDonHangEntity } from "./entities/lich-su-don-hang.entity";
 import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entity";
+import { YeuCauRutTienEntity } from "../User/entities/yeu-cau-rut-tien.entity";
+import { TaiKhoanRutTienEntity } from "../User/entities/tai-khoan-rut-tien.entity";
+import { AdminWithdrawalController } from "./admin-withdrawal.controller";
+import { AdminWithdrawalService } from "./admin-withdrawal.service";
 
 @Module({
   imports: [
@@ -58,6 +62,8 @@ import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entit
       DonHangChiTietEntity,
       LichSuDonHangEntity,
       QuanHeNguoiDungEntity,
+      YeuCauRutTienEntity,
+      TaiKhoanRutTienEntity,
     ]),
   ],
   controllers: [
@@ -69,6 +75,7 @@ import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entit
     AdminReportController,
     AdminPromotionController,
     AdminOrderController,
+    AdminWithdrawalController,
   ],
   providers: [
     AdminDashboardService,
@@ -79,6 +86,7 @@ import { QuanHeNguoiDungEntity } from "../User/entities/quan-he-nguoi-dung.entit
     AdminReportService,
     AdminPromotionService,
     AdminOrderService,
+    AdminWithdrawalService,
   ],
 })
 export class AdminModule {}

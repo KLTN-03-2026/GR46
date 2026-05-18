@@ -264,7 +264,7 @@ export const userCommerceApi = {
     vi_do_giao?: number | null;
     kinh_do_giao?: number | null;
     ghi_chu_tai_xe?: string;
-    phuong_thuc_thanh_toan: 'vnpay';
+    phuong_thuc_thanh_toan: 'vnpay' | 'tien_mat';
     ma_khuyen_mai?: string;
   }) =>
     request('/user/thanh-toan/dat-don', {

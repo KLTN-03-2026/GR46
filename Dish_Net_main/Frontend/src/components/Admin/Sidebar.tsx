@@ -14,6 +14,7 @@ const menuItems = [
     { label: 'Quản lý khuyến mãi', href: '/admin/promotions', icon: 'tag' },
     { label: 'Yêu cầu hỗ trợ', href: '/admin/support', icon: 'help' },
     { label: 'Báo cáo/ Khiếu nại', href: '/admin/reports', icon: 'flag' },
+    { label: 'Yêu cầu rút tiền', href: '/admin/withdrawals', icon: 'wallet' },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -55,6 +56,11 @@ const icons: Record<string, React.ReactNode> = {
     flag: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" x2="4" y1="22" y2="15" />
+        </svg>
+    ),
+    wallet: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
         </svg>
     ),
 };

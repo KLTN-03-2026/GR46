@@ -71,7 +71,7 @@ type PhienThanhToanSnapshot = {
   vi_do_giao?: number | null;
   kinh_do_giao?: number | null;
   ghi_chu_tai_xe: string | null;
-  phuong_thuc_thanh_toan: 'vnpay';
+  phuong_thuc_thanh_toan: 'vnpay' | 'tien_mat';
   tong_tien: {
     tam_tinh: number;
     phi_van_chuyen: number;
@@ -1425,6 +1425,168 @@ export class UserCommerceService {
     };
   }
 
+  private async taoNhieuDonHang(
+    userId: number,
+    snapshot: PhienThanhToanSnapshot,
+    maGiaoDich: string,
+    phuongThuc: 'vnpay' | 'tien_mat',
+  ) {
+    const now = new Date();
+    const allMonIds = [
+      ...new Set(
+        snapshot.groups
+          .flatMap((g) => g.items.map((item) => Number(item.id_mon_an)))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ),
+    ];
+    if (allMonIds.length > 0) {
+      const monAnList = await this.monAnRepo
+        .createQueryBuilder('ma')
+        .where('ma.id IN (:...ids)', { ids: allMonIds })
+        .getMany();
+      const monAnMap = new Map(monAnList.map((item) => [Number(item.id), item]));
+      for (const monId of allMonIds) {
+        const mon = monAnMap.get(monId);
+        if (!mon || mon.trang_thai_ban !== 'dang_ban') {
+          throw new BadRequestException(`Món #${monId} đã hết hàng hoặc ngừng bán`);
+        }
+      }
+    }
+
+    const tongGoc = snapshot.tong_tien.tam_tinh + snapshot.tong_tien.phi_van_chuyen;
+    let giamGiaConLai = snapshot.tong_tien.giam_gia;
+    const createdOrders: Array<{ id: number; ma_don_hang: string; id_cua_hang: number }> = [];
+
+    for (let index = 0; index < snapshot.groups.length; index += 1) {
+      const group = snapshot.groups[index];
+      const tongNhom = group.tam_tinh + group.phi_van_chuyen;
+      let giamGiaNhom = 0;
+
+      if (snapshot.tong_tien.giam_gia > 0) {
+        if (index === snapshot.groups.length - 1) {
+          giamGiaNhom = giamGiaConLai;
+        } else {
+          giamGiaNhom = Number(
+            ((tongNhom / Math.max(tongGoc, 1)) * snapshot.tong_tien.giam_gia).toFixed(2),
+          );
+          giamGiaConLai -= giamGiaNhom;
+        }
+      }
+
+      const maDonHang = this.taoMa('DH');
+      const attribution = await this.tinhHoaHongNhaSangTao(userId, group.items);
+
+      const order = await this.donHangRepo.save({
+        ma_don_hang: maDonHang,
+        id_nguoi_mua: userId,
+        id_cua_hang: group.id_cua_hang,
+        nguoi_nhan: snapshot.nguoi_nhan,
+        so_dien_thoai_nhan: snapshot.so_dien_thoai_nhan,
+        dia_chi_giao: snapshot.dia_chi_giao,
+        vi_do_giao: snapshot.vi_do_giao ?? null,
+        kinh_do_giao: snapshot.kinh_do_giao ?? null,
+        ghi_chu_tai_xe: snapshot.ghi_chu_tai_xe,
+        nguon_don_hang: attribution.idNhaSangTao ? 'bai_viet' : 'truc_tiep',
+        id_bai_viet_nguon: attribution.idBaiViet,
+        id_nha_sang_tao_nguon: attribution.idNhaSangTao,
+        phuong_thuc_thanh_toan: phuongThuc,
+        trang_thai_don_hang: 'cho_xac_nhan',
+        tam_tinh: group.tam_tinh,
+        phi_van_chuyen: group.phi_van_chuyen,
+        tong_giam_gia: giamGiaNhom,
+        tong_thanh_toan: group.tam_tinh + group.phi_van_chuyen - giamGiaNhom,
+        thu_nhap_cua_hang: group.tam_tinh - giamGiaNhom - attribution.tongHoaHong,
+        hoa_hong_nen_tang: 0,
+        hoa_hong_nha_sang_tao: attribution.tongHoaHong,
+        ly_do_huy: null,
+        ly_do_tra_hang: null,
+        nguoi_huy: null,
+        thoi_gian_dat: now,
+        thoi_gian_xac_nhan: null,
+        thoi_gian_giao: null,
+        thoi_gian_hoan_tat: null,
+        thoi_gian_huy: null,
+      });
+
+      await this.donHangChiTietRepo.save(
+        group.items.map((item) => ({
+          id_don_hang: Number(order.id),
+          id_mon_an: item.id_mon_an || null,
+          ten_mon_snapshot: item.ten_mon,
+          hinh_anh_snapshot: item.hinh_anh,
+          don_gia: item.don_gia,
+          so_luong: item.so_luong,
+          thanh_tien: item.thanh_tien,
+          ghi_chu: item.ghi_chu,
+        })),
+      );
+
+      await this.lichSuDonHangRepo.save({
+        id_don_hang: Number(order.id),
+        trang_thai_tu: null,
+        trang_thai_den: 'cho_xac_nhan',
+        noi_dung:
+          phuongThuc === 'tien_mat'
+            ? 'Tạo đơn hàng thanh toán tiền mặt'
+            : 'Tạo đơn hàng sau khi thanh toán VNPAY thành công',
+        id_nguoi_cap_nhat: userId,
+        thoi_gian_cap_nhat: now,
+      });
+
+      await this.thanhToanRepo.save({
+        id_don_hang: Number(order.id),
+        cong_thanh_toan: phuongThuc === 'tien_mat' ? 'tien_mat' : 'vnpay',
+        ma_giao_dich: maGiaoDich,
+        phuong_thuc_thanh_toan: phuongThuc,
+        so_tien: Number(order.tong_thanh_toan),
+        trang_thai_thanh_toan: phuongThuc === 'tien_mat' ? 'cho_thu_tien' : 'thanh_cong',
+        thoi_gian_thanh_toan: now,
+        so_tien_hoan_tien: null,
+        thoi_gian_hoan_tien: null,
+        noi_dung_loi: null,
+        ngay_tao: now,
+      });
+
+      if (snapshot.khuyen_mai && giamGiaNhom > 0) {
+        await this.donHangKhuyenMaiRepo.save({
+          id_don_hang: Number(order.id),
+          id_khuyen_mai: snapshot.khuyen_mai.id,
+          ma_khuyen_mai_snapshot: snapshot.khuyen_mai.ma_khuyen_mai,
+          so_tien_giam: giamGiaNhom,
+        });
+      }
+
+      createdOrders.push({
+        id: Number(order.id),
+        ma_don_hang: order.ma_don_hang,
+        id_cua_hang: Number(order.id_cua_hang),
+      });
+    }
+
+    if (snapshot.khuyen_mai && snapshot.tong_tien.giam_gia > 0) {
+      await this.khuyenMaiRepo.increment({ id: snapshot.khuyen_mai.id }, 'so_luot_da_dung', 1);
+    }
+
+    // Xóa giỏ hàng
+    const cartItemIds = [
+      ...new Set(
+        snapshot.groups
+          .flatMap((g) => g.items.map((item) => Number(item.id_gio_hang)))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ),
+    ];
+    if (cartItemIds.length > 0) {
+      await this.gioHangRepo
+        .createQueryBuilder()
+        .delete()
+        .where('id IN (:...ids)', { ids: cartItemIds })
+        .andWhere('id_nguoi_dung = :userId', { userId })
+        .execute();
+    }
+
+    return createdOrders;
+  }
+
   async datDonHang(userId: number, dto: DatDonHangDto, clientIp?: string | null) {
     if (!dto.nguoi_nhan.trim() || !dto.so_dien_thoai_nhan.trim() || !dto.dia_chi_giao.trim()) {
       throw new BadRequestException('Thiếu thông tin giao hàng bắt buộc');
@@ -1433,6 +1595,50 @@ export class UserCommerceService {
     const preview = await this.xemTruocThanhToan(userId, dto.ma_khuyen_mai, dto.vi_do_giao, dto.kinh_do_giao);
     if (preview.groups.length === 0) {
       throw new BadRequestException('Không có dữ liệu đơn hàng để tạo');
+    }
+
+    // ─── Thanh toán tiền mặt: tạo đơn ngay lập tức ───
+    if (dto.phuong_thuc_thanh_toan === 'tien_mat') {
+      const maTienMat = this.taoMa('TM');
+      const snapshot: PhienThanhToanSnapshot = {
+        nguoi_nhan: dto.nguoi_nhan.trim(),
+        so_dien_thoai_nhan: dto.so_dien_thoai_nhan.trim(),
+        dia_chi_giao: dto.dia_chi_giao.trim(),
+        vi_do_giao: dto.vi_do_giao ?? null,
+        kinh_do_giao: dto.kinh_do_giao ?? null,
+        ghi_chu_tai_xe: dto.ghi_chu_tai_xe?.trim() || null,
+        phuong_thuc_thanh_toan: 'tien_mat',
+        tong_tien: preview.tong_tien,
+        khuyen_mai: preview.khuyen_mai,
+        groups: preview.groups.map((group) => ({
+          id_cua_hang: group.id_cua_hang,
+          ten_cua_hang: group.ten_cua_hang,
+          phi_van_chuyen: group.phi_van_chuyen,
+          tam_tinh: group.tam_tinh,
+          items: group.items.map((item) => ({
+            id_gio_hang: item.id_gio_hang,
+            id_mon_an: item.id_mon_an,
+            ten_mon: item.ten_mon,
+            hinh_anh: item.hinh_anh,
+            so_luong: item.so_luong,
+            don_gia: item.don_gia,
+            toppings: item.toppings,
+            gia_topping: item.gia_topping,
+            thanh_tien: item.thanh_tien,
+            ghi_chu: item.ghi_chu,
+          })),
+        })),
+      };
+
+      const createdOrders = await this.taoNhieuDonHang(userId, snapshot, maTienMat, 'tien_mat');
+      return {
+        message: 'Đặt đơn hàng thanh toán tiền mặt thành công',
+        don_hang: createdOrders.map((o) => o.ma_don_hang),
+        tong_tien: preview.tong_tien,
+        phuong_thuc_thanh_toan: 'tien_mat',
+        ma_giao_dich: maTienMat,
+        payment_url: null,
+      };
     }
 
     const pendingSession = await this.phienThanhToanRepo.findOne({

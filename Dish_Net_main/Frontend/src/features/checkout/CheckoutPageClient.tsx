@@ -135,10 +135,14 @@ function TrashIcon() {
   );
 }
 
-function PaymentMethodRow({
+function PaymentOptionRow({
+  label,
+  description,
   selected,
   onSelect,
 }: {
+  label: string;
+  description: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -146,14 +150,16 @@ function PaymentMethodRow({
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center justify-between rounded-[12px] border border-[#e5e7eb] px-4 py-3 text-left"
+      className={`flex w-full items-center justify-between rounded-[12px] border px-4 py-3 text-left transition ${
+        selected ? 'border-[#2f9e2f] bg-[#f0fdf4]' : 'border-[#e5e7eb] bg-white hover:border-[#b0d8b0]'
+      }`}
     >
       <div>
-        <p className="text-[15px] font-semibold text-black">VNPAY</p>
-        <p className="text-xs text-[#6b7280]">Thanh toán QR / Internet Banking</p>
+        <p className="text-[15px] font-semibold text-black">{label}</p>
+        <p className="text-xs text-[#6b7280]">{description}</p>
       </div>
       <span
-        className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] ${
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${
           selected
             ? 'border-[#2f9e2f] bg-[#2f9e2f] text-white'
             : 'border-[#bababa] bg-white text-transparent'
@@ -182,7 +188,7 @@ export default function CheckoutPageClient() {
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [driverNote, setDriverNote] = useState('');
 
-  const [paymentMethod, setPaymentMethod] = useState<'vnpay' | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'vnpay' | 'tien_mat' | null>(null);
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [availablePromos, setAvailablePromos] = useState<CheckoutPromoOption[]>([]);
@@ -474,7 +480,7 @@ export default function CheckoutPageClient() {
         vi_do_giao: deliveryCoords?.lat ?? null,
         kinh_do_giao: deliveryCoords?.lng ?? null,
         ghi_chu_tai_xe: (driverNote ?? '').trim() || undefined,
-        phuong_thuc_thanh_toan: paymentMethod as 'vnpay',
+        phuong_thuc_thanh_toan: paymentMethod as 'vnpay' | 'tien_mat',
         ma_khuyen_mai: appliedPromo ?? undefined,
       });
       if (typeof result?.payment_url === 'string' && result.payment_url.trim()) {
@@ -775,10 +781,18 @@ export default function CheckoutPageClient() {
               <div className="border-b border-[#ececec] px-6 py-4 text-[17px] font-bold text-black">
                 Hình thức thanh toán
               </div>
-              <div className="space-y-4 px-6 py-5">
-                <PaymentMethodRow
+              <div className="space-y-3 px-6 py-5">
+                <PaymentOptionRow
+                  label="VNPAY"
+                  description="Thanh toán QR / Internet Banking"
                   selected={paymentMethod === 'vnpay'}
                   onSelect={() => setPaymentMethod(paymentMethod === 'vnpay' ? null : 'vnpay')}
+                />
+                <PaymentOptionRow
+                  label="Tiền mặt"
+                  description="Thanh toán khi nhận hàng (COD)"
+                  selected={paymentMethod === 'tien_mat'}
+                  onSelect={() => setPaymentMethod(paymentMethod === 'tien_mat' ? null : 'tien_mat')}
                 />
 
                 <div>

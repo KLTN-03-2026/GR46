@@ -269,8 +269,8 @@ export class DatDonHangDto {
   ghi_chu_tai_xe?: string;
 
   @IsString()
-  @IsIn(['vnpay'])
-  phuong_thuc_thanh_toan: 'vnpay';
+  @IsIn(['vnpay', 'tien_mat'])
+  phuong_thuc_thanh_toan: 'vnpay' | 'tien_mat';
 
   @IsOptional()
   @IsString()
