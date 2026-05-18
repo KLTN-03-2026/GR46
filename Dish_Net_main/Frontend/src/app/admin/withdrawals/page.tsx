@@ -207,7 +207,7 @@ export default function WithdrawalsPage() {
         <AdminTable<WithdrawalItem>
           columns={columns}
           data={data}
-          loading={loading}
+          rowKey={(row) => row.id}
           emptyMessage="Không có yêu cầu rút tiền nào"
         />
       </div>
