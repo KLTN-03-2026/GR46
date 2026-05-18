@@ -46,10 +46,6 @@ type DishOption = {
   extraPrice: number;
 };
 
-const PACKAGING_OPTIONS: DishOption[] = [
-  { id: 'dong-goi-thuong', label: 'Đựng túi bóng', extraPrice: 0 },
-  { id: 'dong-goi-to-dua', label: 'Đựng túi bóng + Tô đũa muỗng', extraPrice: 2000 },
-];
 
 const MAX_DISTINCT_CART_ITEMS = 50;
 const MAX_QUANTITY_PER_ITEM = 50;
@@ -125,7 +121,6 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   const [activeMenuCategory, setActiveMenuCategory] = useState('tat-ca');
   const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
   const [dishQuantity, setDishQuantity] = useState(1);
-  const [selectedPackaging, setSelectedPackaging] = useState(PACKAGING_OPTIONS[0].id);
   const [selectedToppingIds, setSelectedToppingIds] = useState<Set<string>>(new Set());
   const [dishNote, setDishNote] = useState('');
   const [cartSummary, setCartSummary] = useState<StoreCartSummaryItem[]>([]);
@@ -228,13 +223,12 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   }, [loadStoreCartSummary]);
 
   const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
-  const selectedPackagingPrice = PACKAGING_OPTIONS.find((option) => option.id === selectedPackaging)?.extraPrice ?? 0;
   const selectedToppingsPrice = selectedDish
     ? selectedDish.toppings
         .filter((t) => selectedToppingIds.has(t.id))
         .reduce((sum, t) => sum + Number(t.gia ?? 0), 0)
     : 0;
-  const selectedDishTotal = (selectedDishBasePrice + selectedPackagingPrice + selectedToppingsPrice) * dishQuantity;
+  const selectedDishTotal = (selectedDishBasePrice + selectedToppingsPrice) * dishQuantity;
 
   const toggleTopping = (id: string) => {
     setSelectedToppingIds((prev) => {
@@ -339,7 +333,6 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
   const openDishDetail = (item: MenuItem) => {
     setSelectedDish(item);
     setDishQuantity(1);
-    setSelectedPackaging(PACKAGING_OPTIONS[0].id);
     setSelectedToppingIds(new Set());
     setDishNote('');
   };
@@ -619,13 +612,6 @@ export default function StoreMenuPageClient({ store }: { store: StoreDetailData 
                 </div>
 
                 <div className="mt-4 space-y-3">
-                  <DishOptionGroup
-                    title="Cách đóng gói (Vui lòng chọn 1 trong 2)"
-                    options={PACKAGING_OPTIONS}
-                    selected={selectedPackaging}
-                    onChange={setSelectedPackaging}
-                  />
-
                   {selectedDish.toppings.length > 0 && (
                     <section className="overflow-hidden rounded-[10px] border border-[#ececec]">
                       <h4 className="bg-[#fcf9e4] px-4 py-3 text-[15px] font-medium text-[#616462]">Topping (tùy chọn)</h4>

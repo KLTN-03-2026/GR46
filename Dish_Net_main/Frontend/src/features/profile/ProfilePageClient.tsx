@@ -129,7 +129,7 @@ type Follower = {
     anh_dai_dien: string | null;
 };
 
-function FollowersModal({ onClose }: { onClose: () => void }) {
+function FollowersModal({ onClose, profileId, isOwner }: { onClose: () => void; profileId: number; isOwner: boolean }) {
     const [keyword, setKeyword] = useState('');
     const [followers, setFollowers] = useState<Follower[]>([]);
     const [loading, setLoading] = useState(true);
@@ -139,7 +139,7 @@ function FollowersModal({ onClose }: { onClose: () => void }) {
     const load = async (kw?: string) => {
         setLoading(true);
         try {
-            const res = (await userContentApi.layDanhSachNguoiTheoDoi(kw)) as Follower[];
+            const res = (await userContentApi.layDanhSachNguoiTheoDoi(kw, profileId)) as Follower[];
             setFollowers(Array.isArray(res) ? res : []);
         } catch {
             setFollowers([]);
@@ -208,13 +208,15 @@ function FollowersModal({ onClose }: { onClose: () => void }) {
                                         <p className="truncate text-[16px] font-semibold text-[#1f2937]">{f.ten_hien_thi}</p>
                                         <p className="text-sm text-[#9ca3af]">@{f.ten_dang_nhap}</p>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setConfirmTarget(f)}
-                                        className="shrink-0 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-1.5 text-[14px] font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
-                                    >
-                                        Xóa
-                                    </button>
+                                    {isOwner && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmTarget(f)}
+                                            className="shrink-0 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-1.5 text-[14px] font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
+                                        >
+                                            Xóa
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -973,10 +975,12 @@ function PostCard({
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                             {post.shares}
                         </button>
+                        {!canEditPost && (
                         <button type="button" onClick={onReport} className="flex items-center gap-1.5 transition hover:text-[#c62828]">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
                             Báo cáo
                         </button>
+                        )}
                         {post.dishLink ? (
                             <button
                                 type="button"
@@ -1640,8 +1644,23 @@ export default function ProfilePageClient({
     const [isFollowingTarget, setIsFollowingTarget] = useState<boolean>(
         Boolean(profile.isFollowingByMe),
     );
+    const [followersCount, setFollowersCount] = useState(Number(profile.followers?.replace(/\D/g, '') || 0));
     const [isFollowProcessing, setIsFollowProcessing] = useState(false);
     const [isOpeningChat, setIsOpeningChat] = useState(false);
+
+    useEffect(() => {
+        const profileId = Number(profile.id);
+        if (!profileId) return;
+        let active = true;
+        const sync = () => {
+            void userContentApi.layThongTinTrangCaNhan(profileId).then((res: any) => {
+                if (!active) return;
+                if (res?.so_nguoi_theo_doi != null) setFollowersCount(Number(res.so_nguoi_theo_doi));
+            }).catch(() => {});
+        };
+        const id = window.setInterval(sync, 30_000);
+        return () => { active = false; window.clearInterval(id); };
+    }, [profile.id]);
 
     const handleToggleFollow = async () => {
         if (!dangNhap) {
@@ -1655,7 +1674,9 @@ export default function ProfilePageClient({
             const res = (await userContentApi.toggleTheoDoiNguoiDung(targetId)) as {
                 dang_theo_doi?: boolean;
             };
-            setIsFollowingTarget(Boolean(res?.dang_theo_doi));
+            const nowFollowing = Boolean(res?.dang_theo_doi);
+            setIsFollowingTarget(nowFollowing);
+            setFollowersCount((c) => Math.max(0, c + (nowFollowing ? 1 : -1)));
         } catch (err) {
             setActionMessage(
                 err instanceof Error ? err.message : 'Không thể cập nhật theo dõi',
@@ -1708,6 +1729,25 @@ export default function ProfilePageClient({
     const [editingPost, setEditingPost] = useState<UserProfile['posts'][number] | null>(null);
     const [reposts, setReposts] = useState(profile.reposts ?? []);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [deletingPost, setDeletingPost] = useState<{ id: number; type: 'post' | 'repost' } | null>(null);
+
+    const handleDeletePostConfirm = () => {
+        if (!deletingPost) return;
+        const { id, type } = deletingPost;
+        setDeletingPost(null);
+        void userContentApi
+            .xoaBaiViet(id)
+            .then(() => {
+                if (type === 'post') {
+                    setPosts((current) => current.filter((item) => Number(item.id) !== id));
+                    setPostsCount((current) => Math.max(0, current - 1));
+                } else {
+                    setReposts((current) => current.filter((item) => Number(item.id) !== id));
+                }
+                setActionMessage('Đã xóa bài viết');
+            })
+            .catch((e) => setActionMessage(e instanceof Error ? e.message : 'Không thể xóa bài viết'));
+    };
     const [activeCommentPostId, setActiveCommentPostId] = useState<number | null>(null);
     const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
     const [activeRevenuePostId, setActiveRevenuePostId] = useState<number | null>(null);
@@ -1982,16 +2022,18 @@ export default function ProfilePageClient({
                                     </div>
 
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {profile.isTopReviewer ? (
+                                        {profile.isTopReviewer && profile.showBadge ? (
                                             <Badge tone="yellow">
                                                 <span className="text-[#f5b400]">★</span>
                                                 <span>Top 10 Reviewer</span>
                                             </Badge>
                                         ) : null}
-                                        <Badge tone="pink">
-                                            <span>Độ uy tín</span>
-                                            <span className="text-[#f50b0b]">{profile.trustScore}</span>
-                                        </Badge>
+                                        {profile.showTrustScore ? (
+                                            <Badge tone="pink">
+                                                <span>Độ uy tín</span>
+                                                <span className="text-[#f50b0b]">{profile.trustScore}</span>
+                                            </Badge>
+                                        ) : null}
                                     </div>
                                 </div>
 
@@ -2002,7 +2044,7 @@ export default function ProfilePageClient({
                                         onClick={() => setIsFollowersModalOpen(true)}
                                         className="transition hover:underline"
                                     >
-                                        <strong className="font-semibold">{profile.followers}</strong> người theo dõi
+                                        <strong className="font-semibold">{followersCount.toLocaleString('vi-VN')}</strong> người theo dõi
                                     </button>
                                     <button
                                         type="button"
@@ -2246,19 +2288,7 @@ export default function ProfilePageClient({
                                     onDeletePost={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
-                                        if (!window.confirm('Bạn muốn xóa bài viết này?')) return;
-                                        void userContentApi
-                                            .xoaBaiViet(id)
-                                            .then(() => {
-                                                setPosts((current) => current.filter((item) => Number(item.id) !== id));
-                                                setPostsCount((current) => Math.max(0, current - 1));
-                                                setActionMessage('Đã xóa bài viết');
-                                            })
-                                            .catch((e) =>
-                                                setActionMessage(
-                                                    e instanceof Error ? e.message : 'Không thể xóa bài viết',
-                                                ),
-                                            );
+                                        setDeletingPost({ id, type: 'post' });
                                     }}
                                 />
                             ))
@@ -2399,18 +2429,7 @@ export default function ProfilePageClient({
                                     onDeletePost={() => {
                                         const id = Number(post.id);
                                         if (!Number.isFinite(id)) return;
-                                        if (!window.confirm('Bạn muốn xóa bài viết này?')) return;
-                                        void userContentApi
-                                            .xoaBaiViet(id)
-                                            .then(() => {
-                                                setReposts((current) => current.filter((item) => Number(item.id) !== id));
-                                                setActionMessage('Đã xóa bài viết');
-                                            })
-                                            .catch((e) =>
-                                                setActionMessage(
-                                                    e instanceof Error ? e.message : 'Không thể xóa bài viết',
-                                                ),
-                                            );
+                                        setDeletingPost({ id, type: 'repost' });
                                     }}
                                 />
                             ))
@@ -2449,6 +2468,18 @@ export default function ProfilePageClient({
                 ) : null}
             </section>
 
+                {deletingPost && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setDeletingPost(null)}>
+                        <div className="w-full max-w-[380px] rounded-[16px] bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+                            <p className="text-[15px] font-semibold text-black">Xóa bài viết?</p>
+                            <p className="mt-1 text-[13px] text-[#666]">Bài viết sẽ bị xóa vĩnh viễn và không thể khôi phục.</p>
+                            <div className="mt-5 flex justify-end gap-3">
+                                <button type="button" onClick={() => setDeletingPost(null)} className="rounded-[10px] border border-[#ddd] bg-white px-5 py-2 text-[13px] font-semibold text-black hover:bg-gray-50">Hủy</button>
+                                <button type="button" onClick={handleDeletePostConfirm} className="rounded-[10px] bg-[#d32f2f] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#b71c1c]">Xóa</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {isCreatePostModalOpen && canEdit ? (
                     <CreatePostModal
                         profile={profile}
@@ -2532,7 +2563,11 @@ export default function ProfilePageClient({
             ) : null}
 
             {isFollowersModalOpen ? (
-                <FollowersModal onClose={() => setIsFollowersModalOpen(false)} />
+                <FollowersModal
+                    onClose={() => setIsFollowersModalOpen(false)}
+                    profileId={Number(profile.id)}
+                    isOwner={canEdit}
+                />
             ) : null}
 
             {isFollowingModalOpen ? (

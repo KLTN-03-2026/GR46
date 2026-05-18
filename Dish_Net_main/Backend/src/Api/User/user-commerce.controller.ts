@@ -283,8 +283,17 @@ export class UserCommerceController {
   async xemTruocThanhToan(
     @Req() req: AuthenticatedRequest,
     @Query('ma_khuyen_mai') maKhuyenMai?: string,
+    @Query('vi_do') viDoStr?: string,
+    @Query('kinh_do') kinhDoStr?: string,
   ) {
-    return this.userCommerceService.xemTruocThanhToan(req.user!.sub, maKhuyenMai);
+    const viDo = viDoStr ? parseFloat(viDoStr) : null;
+    const kinhDo = kinhDoStr ? parseFloat(kinhDoStr) : null;
+    return this.userCommerceService.xemTruocThanhToan(
+      req.user!.sub,
+      maKhuyenMai,
+      Number.isFinite(viDo) ? viDo : null,
+      Number.isFinite(kinhDo) ? kinhDo : null,
+    );
   }
 
   @Get('thanh-toan/khuyen-mai')

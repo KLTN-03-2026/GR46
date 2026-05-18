@@ -210,14 +210,58 @@ export async function getStoreDetailById(id: string): Promise<StoreDetailData | 
                 .filter((x: number) => Number.isFinite(x) && x > 0),
         ),
     );
-    const reviewPayloads: any[] = await Promise.all(
-        dishIds.map((dishId) =>
-            userContentApi.layDanhGiaMonAn(dishId, { trang: 1, so_luong: 6 }).catch(() => null),
+    const [reviewPayloads, baiVietPayload] = await Promise.all([
+        Promise.all(
+            dishIds.map((dishId) =>
+                userContentApi.layDanhGiaMonAn(dishId, { trang: 1, so_luong: 6 }).catch(() => null),
+            ),
         ),
-    );
+        resolvedStoreId != null
+            ? userContentApi.layBaiVietCuaHang(resolvedStoreId, { so_luong: 10 }).catch(() => null)
+            : Promise.resolve(null),
+    ]);
 
     const reviewCards: StoreDetailReviewCard[] = [];
     const comments: StoreDetailComment[] = [];
+
+    // Bài viết review từ các TikToker/blogger gắn với cửa hàng này
+    const baiVietRows = Array.isArray((baiVietPayload as any)?.du_lieu)
+        ? (baiVietPayload as any).du_lieu
+        : [];
+    baiVietRows.forEach((post: any) => {
+        const gallery = Array.isArray(post?.tep_dinh_kem) ? post.tep_dinh_kem : [];
+        const heroImage = gallery[0] || fallbackImage;
+        const postId = `bv-${post.id}`;
+        const authorId = post.thong_tin_nguoi_dang?.id
+            ? String(post.thong_tin_nguoi_dang.id)
+            : undefined;
+        const avatar = post.thong_tin_nguoi_dang?.anh_dai_dien ?? undefined;
+        const author = String(post.thong_tin_nguoi_dang?.ten_hien_thi ?? 'Reviewer');
+
+        reviewCards.push({
+            id: postId,
+            userId: authorId,
+            avatar,
+            author,
+            date: formatDate(String(post?.ngay_dang ?? '')),
+            excerpt: String(post?.noi_dung ?? ''),
+            heroImage,
+            gallery: gallery.length > 0 ? gallery : [heroImage],
+        });
+
+        comments.push({
+            id: postId,
+            userId: authorId,
+            avatar,
+            author,
+            source: 'Bảng Tin',
+            date: formatDate(String(post?.ngay_dang ?? '')),
+            rating: post.so_sao != null ? `${Number(post.so_sao)}/5` : '',
+            title: 'Bài viết review',
+            body: String(post?.noi_dung ?? ''),
+            gallery,
+        });
+    });
 
     reviewPayloads.forEach((payload, payloadIndex) => {
         const monInfo = payload?.mon_an;
@@ -294,14 +338,43 @@ export async function getStoreDetailById(id: string): Promise<StoreDetailData | 
             minPrice > 0 && maxPrice > 0
                 ? `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
                 : '',
-        score: Number(matchedStore?.diem_danh_gia ?? storeDetail?.diem_danh_gia ?? 0).toFixed(1),
+        score: (() => {
+            const ratings: number[] = [
+                ...baiVietRows
+                    .map((post: any) => Number(post?.so_sao))
+                    .filter((n: number) => Number.isFinite(n) && n > 0),
+                ...reviewPayloads.flatMap((payload) =>
+                    (Array.isArray(payload?.du_lieu) ? payload.du_lieu : [])
+                        .map((review: any) => Number(review?.so_sao))
+                        .filter((n: number) => Number.isFinite(n) && n > 0),
+                ),
+            ];
+            if (ratings.length > 0) {
+                return (ratings.reduce((sum, n) => sum + n, 0) / ratings.length).toFixed(1);
+            }
+            return Number(matchedStore?.diem_danh_gia ?? storeDetail?.diem_danh_gia ?? 0).toFixed(1);
+        })(),
         soldCount: soldCount.toLocaleString('vi-VN'),
         reviewCount: String(reviewCards.length),
         commentCount: String(comments.length),
         menuCategories,
         menuItems,
         reviewCards: reviewCards.slice(0, 8),
-        communityImages: menuItems.slice(0, 8).map((item) => item.image),
+        communityImages: (() => {
+            const isImage = (url: string) => /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(url);
+            const seen = new Set<string>();
+            const imgs: string[] = [];
+            const collect = (files: string[]) => {
+                files.filter(isImage).forEach((url) => { if (!seen.has(url)) { seen.add(url); imgs.push(url); } });
+            };
+            baiVietRows.forEach((post: any) => collect(Array.isArray(post?.tep_dinh_kem) ? post.tep_dinh_kem : []));
+            reviewPayloads.forEach((payload) => {
+                (Array.isArray(payload?.du_lieu) ? payload.du_lieu : []).forEach((review: any) =>
+                    collect(Array.isArray(review?.tep_dinh_kem) ? review.tep_dinh_kem : [])
+                );
+            });
+            return imgs.length > 0 ? imgs.slice(0, 12) : menuItems.slice(0, 8).map((item) => item.image);
+        })(),
         comments: comments.slice(0, 12),
     };
 }

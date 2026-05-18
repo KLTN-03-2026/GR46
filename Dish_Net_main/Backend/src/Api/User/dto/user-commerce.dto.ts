@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
@@ -249,6 +250,18 @@ export class DatDonHangDto {
   @IsNotEmpty()
   @MaxLength(1000)
   dia_chi_giao: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  vi_do_giao?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  kinh_do_giao?: number;
 
   @IsOptional()
   @IsString()

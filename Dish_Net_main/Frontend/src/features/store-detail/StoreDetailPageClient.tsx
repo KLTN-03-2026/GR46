@@ -39,10 +39,7 @@ type DishOption = {
     extraPrice: number;
 };
 
-const PACKAGING_OPTIONS: DishOption[] = [
-    { id: 'dong-goi-thuong', label: 'Đựng túi bóng', extraPrice: 0 },
-    { id: 'dong-goi-to-dua', label: 'Đựng túi bóng + Tô đũa muỗng', extraPrice: 2000 },
-];
+
 const MAX_DISTINCT_CART_ITEMS = 50;
 const MAX_QUANTITY_PER_ITEM = 50;
 
@@ -71,6 +68,32 @@ const IconComment = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 );
 
+function ImageLightbox({ images, startIndex, onClose }: { images: string[]; startIndex: number; onClose: () => void }) {
+    const [current, setCurrent] = useState(startIndex);
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+            if (e.key === 'ArrowRight') setCurrent((p) => Math.min(p + 1, images.length - 1));
+            if (e.key === 'ArrowLeft') setCurrent((p) => Math.max(p - 1, 0));
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [images.length, onClose]);
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80" onClick={onClose}>
+            <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                <img src={images[current]} alt="" className="max-h-[75vh] max-w-[85vw] rounded-[12px] object-contain" />
+                <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setCurrent((p) => Math.max(p - 1, 0))} disabled={current === 0} className="rounded-full bg-white/20 px-4 py-1.5 text-white disabled:opacity-30 hover:bg-white/30">&#8249;</button>
+                    <span className="text-sm text-white">{current + 1} / {images.length}</span>
+                    <button type="button" onClick={() => setCurrent((p) => Math.min(p + 1, images.length - 1))} disabled={current === images.length - 1} className="rounded-full bg-white/20 px-4 py-1.5 text-white disabled:opacity-30 hover:bg-white/30">&#8250;</button>
+                </div>
+                <button type="button" onClick={onClose} className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40">&#x2715;</button>
+            </div>
+        </div>
+    );
+}
+
 function ReviewerCard({
     userId,
     avatar,
@@ -95,6 +118,10 @@ function ReviewerCard({
     const [commentText, setCommentText] = useState('');
     const [commentSubmitted, setCommentSubmitted] = useState(false);
     const commentRef = useRef<HTMLTextAreaElement>(null);
+    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+    const allImages = [heroImage, ...gallery].filter(Boolean);
+    const showImages = allImages.slice(0, 4);
+    const extraCount = allImages.length > 4 ? allImages.length - 4 : 0;
 
     const handleLike = () => {
         if (!dangNhap) { onRequireLogin?.(); return; }
@@ -130,38 +157,43 @@ function ReviewerCard({
     };
 
     return (
-        <article className="rounded-[18px] border border-[#ebe5dd] bg-[#fff6ee] p-5 shadow-[0_8px_22px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+        <>
+        {lightboxIndex !== null && (
+            <ImageLightbox images={allImages} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
+        )}
+        <article className="rounded-[16px] border border-[#ebe5dd] bg-[#fff6ee] p-4 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
                     <button
                         type="button"
                         onClick={() => userId && onNavigateToProfile ? onNavigateToProfile(userId) : undefined}
-                        className={userId ? 'cursor-pointer' : 'cursor-default'}
+                        className={`shrink-0 ${userId ? 'cursor-pointer' : 'cursor-default'}`}
                     >
                         {avatar
-                            ? <img src={avatar} alt={author} className="h-14 w-14 rounded-full object-cover" />
-                            : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ffe0b6] text-[20px]">👥</div>
+                            ? <img src={avatar} alt={author} className="h-11 w-11 rounded-full object-cover ring-2 ring-[#ffe0b6]" />
+                            : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ffe0b6] text-[18px]">👥</div>
                         }
                     </button>
-                    <div>
-                        <div className="flex items-center gap-3">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
                                 onClick={() => userId && onNavigateToProfile ? onNavigateToProfile(userId) : undefined}
-                                className={`text-[18px] font-bold text-[#172554] ${userId ? 'hover:underline' : ''}`}
+                                className={`truncate text-[15px] font-bold text-[#172554] ${userId ? 'hover:underline' : ''}`}
                             >
                                 {author}
                             </button>
-                            <span className="rounded-full bg-[#ffe9bd] px-3 py-1 text-xs font-bold text-[#6b4b00]">TOP REVIEWER</span>
+                            <span className="shrink-0 rounded-full bg-[#ffe9bd] px-2 py-0.5 text-[11px] font-bold text-[#6b4b00]">TOP REVIEWER</span>
                         </div>
-                        <p className="text-sm text-[#6b7280]">{date}</p>
+                        <p className="text-xs text-[#6b7280]">{date}</p>
                     </div>
                 </div>
                 <button
                     type="button"
                     onClick={() => void handleFollow()}
                     disabled={isFollowLoading}
-                    className={`rounded-full px-5 py-2 text-sm font-bold transition disabled:opacity-60 ${
+                    className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-bold transition disabled:opacity-60 ${
                         isFollowing
                             ? 'border border-[#2f9e2f] bg-white text-[#2f9e2f] hover:bg-[#effced]'
                             : 'bg-[#2f9e2f] text-white hover:bg-[#267a25]'
@@ -171,36 +203,47 @@ function ReviewerCard({
                 </button>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-y border-[#efe5d9] py-3 text-sm text-[#5b6475]">
-                <span>Đánh giá nhanh</span>
-                <span className="text-[#f59e0b]">★★★★☆ 4.8</span>
-            </div>
+            {excerpt && (
+                <p className="mt-3 text-[14px] leading-7 text-[#3f3f46]">{excerpt}</p>
+            )}
 
-            <div className="mt-4 grid grid-cols-3 gap-3 text-sm text-[#5b6475]">
-                <span>📍 Vị trí <b className="text-[#f59e0b]">4.9</b></span>
-                <span>🍲 Chất lượng món <b className="text-[#f59e0b]">4.8</b></span>
-                <span>⚡ Trải nghiệm <b className="text-[#f59e0b]">4.8</b></span>
-                <span>🌸 Giá cả <b className="text-[#f59e0b]">4.8</b></span>
-                <span>⏰ Tốc độ phục vụ <b className="text-[#f59e0b]">4.7</b></span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_90px_90px] gap-2">
-                <img src={heroImage} alt={author} className="row-span-2 h-full min-h-[146px] w-full rounded-[12px] object-cover" />
-                <img src={gallery[0] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                <img src={gallery[1] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                <img src={gallery[2] ?? heroImage} alt="" className="h-[68px] w-full rounded-[12px] object-cover" />
-                <div className="relative h-[68px] w-full overflow-hidden rounded-[12px]">
-                    <img src={gallery[3] ?? gallery[2] ?? heroImage} alt="" className="h-full w-full object-cover brightness-50" />
-                    <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">Xem thêm</span>
+            {showImages.length > 0 && (
+                <div className={`mt-3 grid gap-2 ${
+                    showImages.length === 1 ? 'grid-cols-1' :
+                    showImages.length === 2 ? 'grid-cols-2' :
+                    showImages.length === 3 ? 'grid-cols-3' :
+                    'grid-cols-4'
+                }`}>
+                    {showImages.map((img, idx) => {
+                        const isLast = idx === showImages.length - 1 && extraCount > 0;
+                        return (
+                            <div key={idx} className="relative aspect-square overflow-hidden rounded-[10px]">
+                                <img
+                                    src={img}
+                                    alt=""
+                                    className={`h-full w-full cursor-pointer object-cover transition hover:opacity-90 ${isLast ? 'brightness-50' : ''}`}
+                                    onClick={() => setLightboxIndex(idx)}
+                                />
+                                {isLast && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setLightboxIndex(idx)}
+                                        className="absolute inset-0 flex flex-col items-center justify-center text-white"
+                                    >
+                                        <span className="text-xl font-bold">+{extraCount}</span>
+                                        <span className="text-xs font-medium">Xem thêm</span>
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
-            </div>
+            )}
 
-            <p className="mt-4 text-[15px] leading-8 text-[#3f3f46]">{excerpt}</p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-[#ffe8c8] px-4 py-2 text-sm font-semibold text-[#d58800]">Ngon</span>
-                <span className="rounded-full bg-[#ffd8d3] px-4 py-2 text-sm font-semibold text-[#ef4444]">Nên thử</span>
-                <span className="rounded-full bg-[#ffe8c8] px-4 py-2 text-sm font-semibold text-[#d58800]">Đậm vị</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[#ffe8c8] px-3 py-1 text-xs font-semibold text-[#d58800]">Ngon</span>
+                <span className="rounded-full bg-[#ffd8d3] px-3 py-1 text-xs font-semibold text-[#ef4444]">Nên thử</span>
+                <span className="rounded-full bg-[#ffe8c8] px-3 py-1 text-xs font-semibold text-[#d58800]">Đậm vị</span>
             </div>
 
             <div className="mt-4 border-t border-[#efe5d9] pt-4">
@@ -266,6 +309,7 @@ function ReviewerCard({
                 )}
             </div>
         </article>
+        </>
     );
 }
 
@@ -476,7 +520,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const [activeMenuCategory, setActiveMenuCategory] = useState('tat-ca');
     const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
     const [dishQuantity, setDishQuantity] = useState(1);
-    const [selectedPackaging, setSelectedPackaging] = useState(PACKAGING_OPTIONS[0].id);
     const [dishNote, setDishNote] = useState('');
     const [cartSummary, setCartSummary] = useState<StoreCartSummaryItem[]>([]);
     const [cartActionMessage, setCartActionMessage] = useState<string | null>(null);
@@ -610,15 +653,13 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     };
 
     const selectedDishBasePrice = selectedDish ? parseCurrency(selectedDish.price) : 0;
-    const selectedPackagingPrice =
-        PACKAGING_OPTIONS.find((option) => option.id === selectedPackaging)?.extraPrice ?? 0;
     const selectedToppingsPrice = selectedDish
         ? selectedDish.toppings
               .filter((t) => selectedToppingIds.has(String(t.id)))
               .reduce((sum, t) => sum + Number(t.gia ?? 0), 0)
         : 0;
     const selectedDishTotal =
-        (selectedDishBasePrice + selectedPackagingPrice + selectedToppingsPrice) * dishQuantity;
+        (selectedDishBasePrice + selectedToppingsPrice) * dishQuantity;
 
     const resolveBackendMonAnId = async (item: MenuItem) => {
         const numericId = Number(item.id);
@@ -741,7 +782,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
     const openDishDetail = (item: MenuItem) => {
         setSelectedDish(item);
         setDishQuantity(1);
-        setSelectedPackaging(PACKAGING_OPTIONS[0].id);
         setDishNote('');
         setSelectedToppingIds(new Set());
     };
@@ -1316,13 +1356,6 @@ export default function StoreDetailPageClient({ store }: { store: StoreDetailDat
                                 </div>
 
                                 <div className="mt-4 space-y-3">
-                                    <DishOptionGroup
-                                        title="Cách đóng gói (Vui lòng chọn 1 trong 2)"
-                                        options={PACKAGING_OPTIONS}
-                                        selected={selectedPackaging}
-                                        onChange={setSelectedPackaging}
-                                    />
-
                                     {selectedDish.toppings.length > 0 && (
                                         <section className="rounded-[10px] border border-[#ececec] p-3">
                                             <p className="mb-2 text-[13px] font-medium text-[#616462]">Topping</p>

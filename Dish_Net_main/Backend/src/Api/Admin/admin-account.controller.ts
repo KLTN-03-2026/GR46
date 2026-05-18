@@ -17,7 +17,6 @@ import { Roles } from "../../common/decorators/roles.decorator";
 export class AdminAccountController {
   constructor(private readonly adminAccountService: AdminAccountService) {}
 
-  // PB32: Danh sách tài khoản + tìm kiếm + lọc + phân trang
   @Get()
   async layDanhSach(
     @Query("tim_kiem") timKiem?: string,
@@ -41,7 +40,6 @@ export class AdminAccountController {
     return this.adminAccountService.layChiTiet(id);
   }
 
-  // PB32: Khóa tài khoản
   @Patch(":id/khoa")
   async khoaTaiKhoan(
     @Param("id", ParseIntPipe) id: number,

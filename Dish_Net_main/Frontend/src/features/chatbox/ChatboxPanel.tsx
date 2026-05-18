@@ -13,13 +13,11 @@ type Props = {
 };
 
 const GOI_Y_KHACH = [
-    'Hôm nay ăn gì ngon?',
     'Tìm quán bún bò gần Quận 1',
     'Voucher đang có là gì?',
 ];
 
 const GOI_Y_NGUOI_DUNG = [
-    'Hôm nay ăn gì ngon?',
     'Đơn hàng gần nhất của tôi đang ở đâu?',
     'Có voucher nào đang dùng được không?',
 ];
@@ -53,6 +51,7 @@ export default function ChatboxPanel({ variant = 'bubble', initialPhienId, showS
     const [loi, setLoi] = useState<string | null>(null);
     const [phienList, setPhienList] = useState<ChatbotPhien[]>([]);
     const [showPhienMenu, setShowPhienMenu] = useState(false);
+    const [deletingPhienId, setDeletingPhienId] = useState<number | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const showMenu = showSessionMenu ?? variant === 'bubble';
 
@@ -143,12 +142,41 @@ export default function ChatboxPanel({ variant = 'bubble', initialPhienId, showS
 
     const isPage = variant === 'page';
 
+    const xoaPhienConfirm = async () => {
+        if (deletingPhienId === null) return;
+        try {
+            await chatboxApi.xoaPhien(deletingPhienId);
+            if (idPhien === deletingPhienId) {
+                setIdPhien(undefined);
+                setTinNhan([]);
+            }
+            await refreshPhienList();
+        } catch (err) {
+            setLoi(err instanceof Error ? err.message : 'Không xóa được');
+        } finally {
+            setDeletingPhienId(null);
+        }
+    };
+
     return (
+        <>
+        {deletingPhienId !== null && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setDeletingPhienId(null)}>
+                <div className="w-full max-w-[360px] rounded-[16px] bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[15px] font-semibold text-black">Xóa phiên này?</p>
+                    <p className="mt-1 text-[13px] text-[#666]">Toàn bộ lịch sử trò chuyện sẽ bị xóa vĩnh viễn.</p>
+                    <div className="mt-5 flex justify-end gap-3">
+                        <button type="button" onClick={() => setDeletingPhienId(null)} className="rounded-[10px] border border-[#ddd] bg-white px-5 py-2 text-[13px] font-semibold text-black hover:bg-gray-50">Hủy</button>
+                        <button type="button" onClick={() => void xoaPhienConfirm()} className="rounded-[10px] bg-[#d32f2f] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#b71c1c]">Xóa</button>
+                    </div>
+                </div>
+            </div>
+        )}
         <div
             className={
                 isPage
                     ? 'flex h-full w-full flex-col bg-white'
-                    : 'flex h-[560px] w-[380px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10'
+                    : 'flex h-[480px] max-h-[calc(100svh-100px)] w-[360px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10'
             }
         >
             <header className="relative flex items-center justify-between gap-2 border-b border-gray-200 bg-gradient-to-r from-[#2f6f25] to-[#56c194] px-4 py-3 text-white">
@@ -249,17 +277,7 @@ export default function ChatboxPanel({ variant = 'bubble', initialPhienId, showS
                                                 tabIndex={0}
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    if (!confirm('Xóa phiên này?')) return;
-                                                    try {
-                                                        await chatboxApi.xoaPhien(p.id);
-                                                        if (idPhien === p.id) {
-                                                            setIdPhien(undefined);
-                                                            setTinNhan([]);
-                                                        }
-                                                        await refreshPhienList();
-                                                    } catch (err) {
-                                                        setLoi(err instanceof Error ? err.message : 'Không xóa được');
-                                                    }
+                                                    setDeletingPhienId(p.id);
                                                 }}
                                                 className="text-gray-400 hover:text-red-500"
                                                 aria-label="Xóa"
@@ -335,7 +353,7 @@ export default function ChatboxPanel({ variant = 'bubble', initialPhienId, showS
                     e.preventDefault();
                     void gui(draft);
                 }}
-                className="flex items-end gap-2 border-t border-gray-200 bg-white p-3"
+                className="flex shrink-0 items-end gap-2 border-t border-gray-200 bg-white p-3"
             >
                 <textarea
                     value={draft}
@@ -359,5 +377,6 @@ export default function ChatboxPanel({ variant = 'bubble', initialPhienId, showS
                 </button>
             </form>
         </div>
+        </>
     );
 }

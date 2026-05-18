@@ -33,6 +33,7 @@ type CheckoutGroup = {
   id_cua_hang: number;
   ten_cua_hang: string;
   phi_van_chuyen: number;
+  khoang_cach_km: number | null;
   tam_tinh: number;
   items: CheckoutItem[];
 };
@@ -178,13 +179,15 @@ export default function CheckoutPageClient() {
   const [recipientName, setRecipientName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [driverNote, setDriverNote] = useState('');
 
-  const [paymentMethod, setPaymentMethod] = useState<'vnpay'>('vnpay');
+  const [paymentMethod, setPaymentMethod] = useState<'vnpay' | null>(null);
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [availablePromos, setAvailablePromos] = useState<CheckoutPromoOption[]>([]);
   const [showPromoList, setShowPromoList] = useState(false);
+  const [showEmptyCartPopup, setShowEmptyCartPopup] = useState(false);
 
   const mapBackendErrorsToFields = useCallback((rawMessage: string) => {
     const entries = rawMessage
@@ -245,10 +248,12 @@ export default function CheckoutPageClient() {
   }, [searchParams]);
 
   const loadPreview = useCallback(
-    async (promoCode?: string | null) => {
+    async (promoCode?: string | null, coords?: { lat: number; lng: number } | null) => {
       const maKhuyenMai = promoCode?.trim() || undefined;
       const payload = (await userCommerceApi.xemTruocThanhToan(
         maKhuyenMai,
+        coords?.lat ?? null,
+        coords?.lng ?? null,
       )) as CheckoutPreview;
 
       setPreview(payload);
@@ -375,7 +380,7 @@ export default function CheckoutPageClient() {
       await userCommerceApi.capNhatGioHang(itemId, {
         so_luong: Math.max(1, nextQuantity),
       });
-      await loadPreview(appliedPromo);
+      await loadPreview(appliedPromo, deliveryCoords);
       emitUserCartRefreshEvent();
     } catch (error) {
       setPageError(
@@ -384,11 +389,25 @@ export default function CheckoutPageClient() {
     }
   };
 
+  const goBack = () => {
+    const prev = sessionStorage.getItem('checkout_back');
+    if (prev) {
+      sessionStorage.removeItem('checkout_back');
+      router.push(prev);
+    } else {
+      router.back();
+    }
+  };
+
   const removeItem = async (itemId: number) => {
     try {
       await userCommerceApi.xoaItemGioHang(itemId);
-      await loadPreview(appliedPromo);
       emitUserCartRefreshEvent();
+      try {
+        await loadPreview(appliedPromo, deliveryCoords);
+      } catch {
+        setShowEmptyCartPopup(true);
+      }
     } catch (error) {
       setPageError(error instanceof Error ? error.message : 'Không xóa được món khỏi đơn');
     }
@@ -399,7 +418,7 @@ export default function CheckoutPageClient() {
     if (!code) {
       setAppliedPromo(null);
       try {
-        await loadPreview(null);
+        await loadPreview(null, deliveryCoords);
       } catch (error) {
         setPageError(
           error instanceof Error
@@ -412,7 +431,7 @@ export default function CheckoutPageClient() {
 
     setIsApplyingPromo(true);
     try {
-      await loadPreview(code);
+      await loadPreview(code, deliveryCoords);
       setAppliedPromo(code);
       setShowPromoList(false);
     } catch (error) {
@@ -428,6 +447,11 @@ export default function CheckoutPageClient() {
     if (isPlacingOrder) return;
     if (!preview || selectedGroups.length === 0) {
       setPageError('Không có món nào để đặt đơn');
+      return;
+    }
+
+    if (!paymentMethod) {
+      setPageError('Vui lòng chọn hình thức thanh toán.');
       return;
     }
 
@@ -447,8 +471,10 @@ export default function CheckoutPageClient() {
         nguoi_nhan: (recipientName ?? '').trim(),
         so_dien_thoai_nhan: (phone ?? '').trim(),
         dia_chi_giao: (address ?? '').trim(),
+        vi_do_giao: deliveryCoords?.lat ?? null,
+        kinh_do_giao: deliveryCoords?.lng ?? null,
         ghi_chu_tai_xe: (driverNote ?? '').trim() || undefined,
-        phuong_thuc_thanh_toan: paymentMethod,
+        phuong_thuc_thanh_toan: paymentMethod as 'vnpay',
         ma_khuyen_mai: appliedPromo ?? undefined,
       });
       if (typeof result?.payment_url === 'string' && result.payment_url.trim()) {
@@ -488,16 +514,7 @@ export default function CheckoutPageClient() {
           <div className="mb-6 flex items-center gap-3">
             <button
               type="button"
-              onClick={() => {
-                const prev = sessionStorage.getItem('checkout_back');
-                if (prev) {
-                  sessionStorage.removeItem('checkout_back');
-                  router.push(prev);
-                } else {
-                  const storeId = preview?.groups?.[0]?.id_cua_hang;
-                  storeId ? router.push(`/explore/store/${storeId}/menu`) : router.back();
-                }
-              }}
+              onClick={goBack}
               className="flex h-10 w-10 items-center justify-center rounded-full text-black transition hover:bg-white"
               aria-label="Quay lại trang trước"
             >
@@ -632,6 +649,11 @@ export default function CheckoutPageClient() {
                     setAddress(next);
                     setFieldErrors((prev) => ({ ...prev, address: undefined }));
                   }}
+                  onCoordsChange={(lat, lng) => {
+                    const coords = { lat, lng };
+                    setDeliveryCoords(coords);
+                    void loadPreview(appliedPromo, coords);
+                  }}
                   error={fieldErrors.address}
                 />
 
@@ -661,10 +683,17 @@ export default function CheckoutPageClient() {
                       {group.items.reduce((sum, item) => sum + item.so_luong, 0)} món đang chọn
                     </p>
                   </div>
-                  <div className="text-right text-[14px] text-[#4b5563]">
+                  <div className="text-right text-[13px] text-[#4b5563]">
                     <div>Tạm tính: {formatCurrency(group.tam_tinh)}</div>
-                    <div className="mt-1 font-semibold text-black">
-                      Tổng quán: {formatCurrency(group.tam_tinh + group.phi_van_chuyen)}
+                    <div className="mt-0.5 text-[#6b7280]">
+                      Phí ship:{' '}
+                      <span className="text-[#f0a050]">+{formatCurrency(group.phi_van_chuyen)}</span>
+                      {group.khoang_cach_km != null && (
+                        <span className="ml-1 text-[11px] text-[#9ca3af]">(~{group.khoang_cach_km} km)</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 font-semibold text-black">
+                      Tổng: {formatCurrency(group.tam_tinh + group.phi_van_chuyen)}
                     </div>
                   </div>
                 </div>
@@ -749,7 +778,7 @@ export default function CheckoutPageClient() {
               <div className="space-y-4 px-6 py-5">
                 <PaymentMethodRow
                   selected={paymentMethod === 'vnpay'}
-                  onSelect={() => setPaymentMethod('vnpay')}
+                  onSelect={() => setPaymentMethod(paymentMethod === 'vnpay' ? null : 'vnpay')}
                 />
 
                 <div>
@@ -834,9 +863,35 @@ export default function CheckoutPageClient() {
                   <span>Tạm tính</span>
                   <span>{formatCurrency(preview.tong_tien.tam_tinh)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Phí vận chuyển</span>
-                  <span>{formatCurrency(preview.tong_tien.phi_van_chuyen)}</span>
+                <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="flex items-center gap-1">
+                      Phí vận chuyển
+                      {deliveryCoords && (
+                        <span className="rounded-full bg-[#e8f5e9] px-1.5 py-0.5 text-[10px] font-semibold text-[#2e7d32]">
+                          {preview.groups.length === 1 && preview.groups[0].khoang_cach_km != null
+                            ? `~${preview.groups[0].khoang_cach_km} km`
+                            : 'theo khoảng cách'}
+                        </span>
+                      )}
+                    </span>
+                    <span>{formatCurrency(preview.tong_tien.phi_van_chuyen)}</span>
+                  </div>
+                  {preview.groups.length > 1 && (
+                    <div className="mt-1.5 space-y-1 border-t border-dashed border-[#f0f0f0] pt-1.5">
+                      {preview.groups.map((g) => (
+                        <div key={g.id_cua_hang} className="flex items-center justify-between text-[12px] text-[#6b7280]">
+                          <span className="truncate max-w-[130px]">{g.ten_cua_hang}</span>
+                          <span>
+                            {g.khoang_cach_km != null && (
+                              <span className="mr-1 text-[11px] text-[#9ca3af]">~{g.khoang_cach_km} km ·</span>
+                            )}
+                            {formatCurrency(g.phi_van_chuyen)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>Giảm giá</span>
@@ -864,6 +919,30 @@ export default function CheckoutPageClient() {
           </aside>
         </div>
       </section>
+
+      {showEmptyCartPopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[360px] rounded-[20px] bg-white px-8 py-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#fff4e5]">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f0a050" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+            </div>
+            <h3 className="text-[18px] font-bold text-black">Giỏ hàng trống</h3>
+            <p className="mt-2 text-[14px] text-[#6b7280]">
+              Vui lòng chọn thêm món để tiếp tục thanh toán.
+            </p>
+            <button
+              type="button"
+              onClick={goBack}
+              className="mt-6 w-full rounded-[12px] bg-[#2f9e2f] py-3 text-[15px] font-bold text-white transition hover:bg-[#256b28]"
+            >
+              Tiếp tục
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -339,6 +339,16 @@ export class StoreMenuService {
     if (payload.gia_ban === undefined || payload.gia_ban < 0) {
       throw new BadRequestException('Giá bán không hợp lệ');
     }
+
+    const trungTen = await this.monAnRepo.findOne({
+      where: {
+        id_cua_hang: cuaHang.id,
+        ten_mon: payload.ten_mon.trim(),
+      },
+    });
+    if (trungTen) {
+      throw new BadRequestException(`Món "${payload.ten_mon.trim()}" đã tồn tại trong cửa hàng của bạn`);
+    }
     if (payload.id_danh_muc && !hasDanhMucTable) {
       throw new BadRequestException(
         'Không thể gán danh mục vì database chưa được cập nhật bảng danh_muc_mon',

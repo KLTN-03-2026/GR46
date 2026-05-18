@@ -1,7 +1,4 @@
-import { notFound } from 'next/navigation';
-
-import RankingReviewerDetailPageClient from '@/features/ranking-reviewer-detail/RankingReviewerDetailPageClient';
-import { getRankingReviewerDetailById } from '@/features/ranking-reviewer-detail/data';
+import { redirect } from 'next/navigation';
 
 export default async function RankingReviewerDetailPage({
     params,
@@ -9,11 +6,5 @@ export default async function RankingReviewerDetailPage({
     params: Promise<{ id: string }>;
 }) {
     const { id } = await params;
-    const reviewer = await getRankingReviewerDetailById(id);
-
-    if (!reviewer) {
-        notFound();
-    }
-
-    return <RankingReviewerDetailPageClient reviewer={reviewer} />;
+    redirect(`/profile/${id}`);
 }

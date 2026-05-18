@@ -6,20 +6,22 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/shared/AuthContext';
-import { resolveNotificationTarget, type NotificationItem } from '@/features/notifications/data';
+import { resolveNotificationTarget, mapNotificationRow, SYSTEM_LOGO, type NotificationItem } from '@/features/notifications/data';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
 function NotificationIcon({ type }: { type: NotificationItem['type'] }) {
-    const config = {
+    const config: Record<NotificationItem['type'], { bg: string; label: string }> = {
         like: { bg: 'bg-[#1f7ae0]', label: 'TG' },
         support: { bg: 'bg-[#1f7ae0]', label: 'HT' },
         follow: { bg: 'bg-[#1f7ae0]', label: 'TD' },
         comment: { bg: 'bg-[#35c85a]', label: 'BL' },
-    }[type];
+        order: { bg: 'bg-[#f57c00]', label: 'ĐH' },
+    };
+    const { bg, label } = config[type] ?? config.support;
 
     return (
-        <span className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${config.bg}`}>
-            {config.label}
+        <span className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${bg}`}>
+            {label}
         </span>
     );
 }
@@ -67,27 +69,7 @@ export default function Header() {
             .then((payload: any) => {
                 if (!mounted) return;
                 const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
-                const mapped: NotificationItem[] = rows.map((item: any, index: number) => ({
-                    id: String(item.id ?? `header-noti-${index}`),
-                    avatar: String(
-                        item?.nguoi_nhan?.anh_dai_dien ??
-                            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-                    ),
-                    type:
-                        String(item.loai_thong_bao ?? '').includes('tuong_tac')
-                            ? 'like'
-                            : String(item.loai_thong_bao ?? '').includes('binh_luan')
-                              ? 'comment'
-                              : String(item.loai_thong_bao ?? '').includes('theo_doi')
-                                ? 'follow'
-                                : 'support',
-                    message: String(item.tieu_de || item.noi_dung || 'Bạn có thông báo mới'),
-                    loaiThongBao: String(item.loai_thong_bao ?? ''),
-                    loaiDoiTuong: String(item.loai_doi_tuong ?? ''),
-                    idDoiTuong: item.id_doi_tuong != null ? Number(item.id_doi_tuong) : null,
-                    time: item.ngay_tao ? new Date(item.ngay_tao).toLocaleString('vi-VN') : 'Vừa xong',
-                    isRead: Boolean(item.da_doc),
-                }));
+                const mapped: NotificationItem[] = rows.map(mapNotificationRow);
                 setNotifications(mapped);
                 setUnreadNotificationCount(mapped.filter((item) => !item.isRead).length);
             })
@@ -187,10 +169,22 @@ export default function Header() {
 
     const submitSearch = (query: string) => {
         const trimmedQuery = query.trim();
-        if (!trimmedQuery) return;
+        if (!trimmedQuery) {
+            // Xóa trắng → quay về trang chủ
+            setIsSearchOpen(false);
+            setSearchValue('');
+            if (pathname.startsWith('/search')) router.push('/');
+            return;
+        }
         setRecentSearches((current) => [trimmedQuery, ...current.filter((entry) => entry.toLowerCase() !== trimmedQuery.toLowerCase())].slice(0, 6));
         setIsSearchOpen(false);
         router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`);
+    };
+
+    const clearSearch = () => {
+        setSearchValue('');
+        setIsSearchOpen(false);
+        if (pathname.startsWith('/search')) router.push('/');
     };
 
     const handleLogout = async () => {
@@ -238,6 +232,16 @@ export default function Header() {
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitSearch(searchValue); } }}
                             autoComplete="off"
                             className="flex-1 border-none bg-transparent text-base placeholder:text-text-gray" id="search-input" />
+                        {(isSearchOpen ? searchValue : currentQuery || searchValue) ? (
+                            <button
+                                type="button"
+                                onClick={clearSearch}
+                                aria-label="Xóa tìm kiếm"
+                                className="ml-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#c8cfc8] text-white transition hover:bg-[#9aa09a] text-[13px] font-bold leading-none"
+                            >
+                                ×
+                            </button>
+                        ) : null}
                     </div>
 
                     {isSearchOpen ? (
@@ -333,12 +337,21 @@ export default function Header() {
                                                 className="flex w-full items-center gap-3 rounded-[16px] px-3 py-3 text-left transition hover:bg-[#f8faf7]"
                                             >
                                                 <div className="relative shrink-0">
-                                                    <img src={item.avatar} alt="" className="h-16 w-16 rounded-full object-cover" />
+                                                    {item.isSystemAvatar ? (
+                                                        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#f0f7e8] border border-[#d4e8c2]">
+                                                            <Image src={SYSTEM_LOGO} alt="DishNet" width={36} height={36} className="object-contain" />
+                                                        </div>
+                                                    ) : (
+                                                        <img src={item.avatar} alt="" className="h-16 w-16 rounded-full object-cover" />
+                                                    )}
                                                     <NotificationIcon type={item.type} />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-[16px] leading-7 text-[#191919]">{item.message}</p>
-                                                    <p className="mt-1 text-[14px] font-semibold text-[#2f6f25]">{item.time}</p>
+                                                    <p className="text-[16px] font-semibold leading-6 text-[#191919]">{item.message}</p>
+                                                    {item.noi_dung && item.noi_dung !== item.message && (
+                                                        <p className="mt-0.5 line-clamp-2 text-[13px] leading-5 text-[#555]">{item.noi_dung}</p>
+                                                    )}
+                                                    <p className="mt-1 text-[13px] font-semibold text-[#2f6f25]">{item.time}</p>
                                                 </div>
                                                 <span className={`mr-1 h-4 w-4 rounded-full ${item.isRead ? 'bg-[#bfc8b9]' : 'bg-[#2f8f22]'}`} />
                                             </button>

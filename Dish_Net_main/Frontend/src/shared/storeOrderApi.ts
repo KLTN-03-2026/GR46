@@ -81,6 +81,7 @@ export interface StoreOrderItem {
   ly_do_tra_hang: string | null;
   nguoi_huy: string | null;
   anh_dai_dien_khach: string | null;
+  tong_gia_han_phut?: number;
 }
 
 export interface DanhSachDonHangResponse {

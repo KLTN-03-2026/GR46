@@ -66,10 +66,31 @@ function EditItemModal({
   const [price, setPrice] = useState(item.gia_ban.toString());
   const [idDanhMuc, setIdDanhMuc] = useState(item.id_danh_muc?.toString() ?? '');
   const [toppings, setToppings] = useState(item.toppings.map((t) => ({ name: t.ten_topping, price: t.gia.toString() })));
+  const [imageUrl, setImageUrl] = useState(item.hinh_anh_dai_dien ?? '');
+  const [uploading, setUploading] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePickFile = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const res = await userContentApi.uploadTepBaiViet(file);
+      setImageUrl(res.url);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Tải ảnh thất bại'));
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Tên món không được để trống'); return; }
@@ -89,6 +110,7 @@ function EditItemModal({
         mo_ta: desc,
         gia_ban: priceNum,
         id_danh_muc: idDanhMuc || undefined,
+        hinh_anh_dai_dien: imageUrl || undefined,
         trang_thai_ban: status,
         toppings: cleanToppings,
       });
@@ -97,6 +119,7 @@ function EditItemModal({
         ten_mon: name,
         mo_ta: desc,
         gia_ban: priceNum,
+        hinh_anh_dai_dien: imageUrl || null,
         id_danh_muc: idDanhMuc ? Number(idDanhMuc) : null,
         trang_thai_ban: status,
         toppings: cleanToppings.map((t, i) => ({
@@ -115,18 +138,34 @@ function EditItemModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-[540px] rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-5">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative flex max-h-full w-full max-w-[540px] flex-col rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between px-6 pt-5">
           <div />
           <h3 className="text-[17px] font-bold text-black">Sửa thông tin món</h3>
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f0f0f0] text-[18px] text-[#555] transition hover:bg-[#e0e0e0]">×</button>
         </div>
-        <div className="px-6 pb-6 pt-4">
-          <div className="flex items-center gap-4 rounded-[10px] border border-[#e8e8e8] p-3">
-            <img src={item.hinh_anh_dai_dien || menuFallbackImage} alt={item.ten_mon} className="h-16 w-16 rounded-[8px] object-cover" />
-            <span className="flex-1 text-[15px] font-medium text-black">{name || '...'}</span>
-          </div>
+        <div className="overflow-y-auto px-6 pb-6 pt-4">
+          <button
+            type="button"
+            onClick={handlePickFile}
+            disabled={uploading || saving}
+            className="flex w-full items-center gap-4 rounded-[10px] border border-dashed border-[#ccc] p-3 text-left transition hover:border-[#2e7d32] hover:bg-[#fafdf9] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <div className="relative h-16 w-16 shrink-0">
+              <img src={imageUrl || menuFallbackImage} alt={item.ten_mon} className="h-16 w-16 rounded-[8px] object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center rounded-[8px] bg-black/30 opacity-0 transition hover:opacity-100">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-[13px] font-medium text-black">{name || '...'}</p>
+              <p className="mt-0.5 text-[12px] text-[#888]">
+                {uploading ? 'Đang tải ảnh...' : 'Bấm để đổi ảnh'}
+              </p>
+            </div>
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="text-[13px] font-medium text-black">Tên Món</label>
@@ -190,10 +229,10 @@ function EditItemModal({
             </div>
           </div>
           {error && <p className="mt-2 text-center text-[13px] text-[#d32f2f]">{error}</p>}
-          <div className="mt-5 flex items-center justify-center gap-3">
-            <button type="button" onClick={onClose} className="rounded-[10px] border border-[#ddd] bg-white px-8 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-50" disabled={saving}>Hủy</button>
-            <button type="button" onClick={handleSave} className="rounded-[10px] bg-[#2e7d32] px-8 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#256b28]" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
-          </div>
+        </div>
+        <div className="shrink-0 border-t border-[#f0f0f0] px-6 py-4 flex items-center justify-center gap-3">
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-[#ddd] bg-white px-8 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-50" disabled={saving}>Hủy</button>
+          <button type="button" onClick={handleSave} className="rounded-[10px] bg-[#2e7d32] px-8 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#256b28]" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
         </div>
       </div>
     </div>
@@ -254,11 +293,13 @@ function DeleteItemModal({ item, onClose, onDelete }: { item: MonAnItem; onClose
    ═══════════════════════════════════════════ */
 function AddItemModal({
   danhMucList,
+  existingNames,
   onClose,
   onAdd,
   onNewDanhMuc,
 }: {
   danhMucList: DanhMucItem[];
+  existingNames: string[];
   onClose: () => void;
   onAdd: (item: MonAnItem) => void;
   onNewDanhMuc?: (item: DanhMucItem) => void;
@@ -303,8 +344,13 @@ function AddItemModal({
     }
   };
 
+  const isDuplicateName = name.trim()
+    ? existingNames.some((n) => n.trim().toLowerCase() === name.trim().toLowerCase())
+    : false;
+
   const handleAdd = async () => {
     if (!name.trim()) { setError('Tên món không được để trống'); return; }
+    if (isDuplicateName) { setError(`Món "${name.trim()}" đã tồn tại trong cửa hàng của bạn`); return; }
     const priceNum = parseMoneyInput(price);
     if (priceNum === null || priceNum < 0) { setError('Giá không hợp lệ'); return; }
     setSaving(true);
@@ -367,14 +413,14 @@ function AddItemModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-[540px] rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-5">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative flex max-h-full w-full max-w-[540px] flex-col rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between px-6 pt-5">
           <div />
           <h3 className="text-[17px] font-bold text-black">Thông tin món mới</h3>
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f0f0f0] text-[18px] text-[#555] transition hover:bg-[#e0e0e0]">×</button>
         </div>
-        <div className="px-6 pb-6 pt-4">
+        <div className="overflow-y-auto px-6 pb-2 pt-4">
           <button
             type="button"
             onClick={handlePickFile}
@@ -403,7 +449,16 @@ function AddItemModal({
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="text-[13px] font-medium text-black">Tên Món <span className="text-[#d32f2f]">*</span></label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên món mới" className="mt-1 w-full rounded-[8px] border border-[#e0e0e0] px-3 py-2 text-[14px] text-black outline-none placeholder:text-[#bbb] focus:border-[#2e7d32]" />
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Tên món mới"
+                className={`mt-1 w-full rounded-[8px] border px-3 py-2 text-[14px] text-black outline-none placeholder:text-[#bbb] focus:border-[#2e7d32] ${isDuplicateName ? 'border-[#d32f2f]' : 'border-[#e0e0e0]'}`}
+              />
+              {isDuplicateName && (
+                <p className="mt-1 text-[12px] text-[#d32f2f]">Món này đã tồn tại trong cửa hàng của bạn</p>
+              )}
             </div>
             <div className="relative">
               <label className="text-[13px] font-medium text-black">Trạng thái</label>
@@ -500,10 +555,10 @@ function AddItemModal({
             </div>
           </div>
           {error && <p className="mt-2 text-center text-[13px] text-[#d32f2f]">{error}</p>}
-          <div className="mt-5 flex items-center justify-center gap-3">
-            <button type="button" onClick={onClose} className="rounded-[10px] border border-[#ddd] bg-white px-8 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-50" disabled={saving}>Hủy</button>
-            <button type="button" onClick={handleAdd} className="rounded-[10px] bg-[#2e7d32] px-8 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#256b28]" disabled={saving}>{saving ? 'Đang thêm...' : 'Thêm'}</button>
-          </div>
+        </div>
+        <div className="shrink-0 border-t border-[#f0f0f0] px-6 py-4 flex items-center justify-center gap-3">
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-[#ddd] bg-white px-8 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-50" disabled={saving}>Hủy</button>
+          <button type="button" onClick={handleAdd} className="rounded-[10px] bg-[#2e7d32] px-8 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#256b28]" disabled={saving}>{saving ? 'Đang thêm...' : 'Thêm'}</button>
         </div>
       </div>
     </div>
@@ -885,6 +940,7 @@ export default function MenuTab() {
       {showAdd && (
         <AddItemModal
           danhMucList={danhMucList}
+          existingNames={items.map((i) => i.ten_mon)}
           onClose={() => setShowAdd(false)}
           onAdd={handleAddItem}
           onNewDanhMuc={(item) => setDanhMucList((prev) => [...prev, item])}

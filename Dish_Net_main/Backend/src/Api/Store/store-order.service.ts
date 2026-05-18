@@ -11,6 +11,8 @@ import { DonHangChiTietEntity } from '../Admin/entities/don-hang-chi-tiet.entity
 import { LichSuDonHangEntity } from '../Admin/entities/lich-su-don-hang.entity';
 import { CuaHangEntity } from '../Admin/entities/cua-hang.entity';
 import { DanhGiaEntity } from './entities/danh-gia.entity';
+import { ThongBaoEntity } from '../Admin/entities/thong-bao.entity';
+import { In } from 'typeorm';
 import {
   DanhSachDonHangStoreQueryDto,
   GiaHanDonHangDto,
@@ -33,6 +35,8 @@ export class StoreOrderService {
     private readonly cuaHangRepo: Repository<CuaHangEntity>,
     @InjectRepository(DanhGiaEntity)
     private readonly danhGiaRepo: Repository<DanhGiaEntity>,
+    @InjectRepository(ThongBaoEntity)
+    private readonly thongBaoRepo: Repository<ThongBaoEntity>,
   ) {}
 
   private mapDbStatusToDisplay(status: string): string {
@@ -137,6 +141,24 @@ export class StoreOrderService {
 
     const tabCounts = await this.tinhTabCounts(cuaHang.id);
 
+    // Lấy tổng phút gia hạn cho từng đơn từ lịch sử
+    const donHangIds = items.map((i) => Number(i.id));
+    const giaHanMap = new Map<number, number>();
+    if (donHangIds.length > 0) {
+      const lichSuGiaHan = await this.lichSuDonHangRepo.find({
+        where: { id_don_hang: In(donHangIds) as any },
+        select: { id_don_hang: true, noi_dung: true },
+      });
+      for (const record of lichSuGiaHan) {
+        if (!record.noi_dung) continue;
+        const match = record.noi_dung.match(/Gia hạn thời gian chuẩn bị thêm (\d+) phút/);
+        if (match) {
+          const id = Number(record.id_don_hang);
+          giaHanMap.set(id, (giaHanMap.get(id) ?? 0) + parseInt(match[1], 10));
+        }
+      }
+    }
+
     return {
       du_lieu: items.map((item) => ({
         id: Number(item.id),
@@ -164,6 +186,7 @@ export class StoreOrderService {
         ly_do_huy: item.ly_do_huy,
         ly_do_tra_hang: item.ly_do_tra_hang,
         nguoi_huy: item.nguoi_huy,
+        tong_gia_han_phut: giaHanMap.get(Number(item.id)) ?? 0,
       })),
       tab_counts: tabCounts,
       tong_so: tongSo,
@@ -513,10 +536,27 @@ export class StoreOrderService {
     await this.lichSuDonHangRepo.save({
       id_don_hang: donHang.id,
       trang_thai_den: 'dang_chuan_bi',
-      noi_dung: `Gia hạn thời gian chuẩn bị thêm ${soPhut} phút. Lý do: ${dto.so_phut_gia_han}`,
+      noi_dung: `Gia hạn thời gian chuẩn bị thêm ${soPhut} phút`,
       id_nguoi_cap_nhat: nguoiDungId,
       thoi_gian_cap_nhat: new Date(),
     });
+
+    // Gửi thông báo cho khách hàng
+    try {
+      await this.thongBaoRepo.save({
+        id_nguoi_nhan: Number(donHang.id_nguoi_mua),
+        loai_thong_bao: 'don_hang',
+        loai_doi_tuong: 'don_hang',
+        id_doi_tuong: Number(donHang.id),
+        tieu_de: 'Đơn hàng được gia hạn',
+        noi_dung: `Đơn hàng #${donHang.ma_don_hang} của bạn cần thêm ${soPhut} phút để chuẩn bị. Cảm ơn bạn đã kiên nhẫn chờ đợi!`,
+        da_doc: false,
+        thoi_gian_doc: null,
+        ngay_tao: new Date(),
+      });
+    } catch (e) {
+      console.error('[giaHanDonHang] Lỗi lưu thông báo:', e);
+    }
 
     return {
       message: `Đã gia hạn thêm ${soPhut} phút`,

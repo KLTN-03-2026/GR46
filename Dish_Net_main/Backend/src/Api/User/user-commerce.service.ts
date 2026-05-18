@@ -68,6 +68,8 @@ type PhienThanhToanSnapshot = {
   nguoi_nhan: string;
   so_dien_thoai_nhan: string;
   dia_chi_giao: string;
+  vi_do_giao?: number | null;
+  kinh_do_giao?: number | null;
   ghi_chu_tai_xe: string | null;
   phuong_thuc_thanh_toan: 'vnpay';
   tong_tien: {
@@ -482,7 +484,7 @@ export class UserCommerceService {
 
     const qb = this.thongBaoRepo
       .createQueryBuilder('tb')
-      .leftJoinAndSelect('tb.nguoi_nhan', 'nguoi_nhan')
+      .leftJoinAndSelect('tb.nguoi_gui', 'nguoi_gui')
       .where('tb.id_nguoi_nhan = :userId', { userId })
       .orderBy('tb.ngay_tao', 'DESC')
       .addOrderBy('tb.id', 'DESC')
@@ -506,11 +508,11 @@ export class UserCommerceService {
         da_doc: Boolean(item.da_doc),
         thoi_gian_doc: item.thoi_gian_doc,
         ngay_tao: item.ngay_tao,
-        nguoi_nhan: item.nguoi_nhan
+        nguoi_gui: item.nguoi_gui
           ? {
-              id: Number(item.nguoi_nhan.id),
-              ten_hien_thi: item.nguoi_nhan.ten_hien_thi,
-              anh_dai_dien: item.nguoi_nhan.anh_dai_dien,
+              id: Number(item.nguoi_gui.id),
+              ten_hien_thi: item.nguoi_gui.ten_hien_thi,
+              anh_dai_dien: item.nguoi_gui.anh_dai_dien,
             }
           : null,
       })),
@@ -1115,6 +1117,36 @@ export class UserCommerceService {
     return this.layGioHang(userId);
   }
 
+  /** Haversine formula — trả về khoảng cách (km) giữa 2 tọa độ */
+  private tinhKhoangCach(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  /**
+   * Tính phí vận chuyển theo khoảng cách, tương tự GrabFood VN:
+   *  - 0–2 km : 15,000đ (base)
+   *  - >2 km  : +5,000đ mỗi km tiếp theo, làm tròn lên 1,000đ gần nhất
+   *  - Tối đa : 50,000đ
+   *  - Fallback: dùng macDinh nếu không có tọa độ
+   */
+  private tinhPhiVanChuyenTheoKhoangCach(khoangCach: number, macDinh: number): number {
+    if (khoangCach <= 0) return macDinh;
+    const BASE = 15000;
+    const RATE = 5000;
+    const THRESHOLD = 2;
+    const MAX = 50000;
+    const raw = khoangCach <= THRESHOLD ? BASE : BASE + Math.ceil(khoangCach - THRESHOLD) * RATE;
+    return Math.min(Math.ceil(raw / 1000) * 1000, MAX);
+  }
+
   private tinhKhuyenMai(
     khuyenMai: KhuyenMaiEntity,
     tongTien: number,
@@ -1246,7 +1278,7 @@ export class UserCommerceService {
     return { du_lieu: duLieu };
   }
 
-  async xemTruocThanhToan(userId: number, maKhuyenMai?: string) {
+  async xemTruocThanhToan(userId: number, maKhuyenMai?: string, viDo?: number | null, kinhDo?: number | null) {
     const user = await this.nguoiDungRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Người dùng không tồn tại');
@@ -1267,6 +1299,7 @@ export class UserCommerceService {
         id_cua_hang: number;
         ten_cua_hang: string;
         phi_van_chuyen: number;
+        khoang_cach_km: number | null;
         items: Array<{
           id_gio_hang: number;
           id_mon_an: number;
@@ -1292,10 +1325,23 @@ export class UserCommerceService {
     for (const row of selectedRows) {
       const storeId = Number(row.id_cua_hang);
       const store = storeMap.get(storeId);
+      const macDinh = Number(store?.phi_van_chuyen_mac_dinh ?? 31000);
+      const hasCoords =
+        viDo != null && kinhDo != null &&
+        store?.vi_do != null && store?.kinh_do != null;
+      const phiCuaHang = hasCoords
+        ? this.tinhPhiVanChuyenTheoKhoangCach(
+            this.tinhKhoangCach(viDo!, kinhDo!, Number(store!.vi_do), Number(store!.kinh_do)),
+            macDinh,
+          )
+        : macDinh;
       const current = grouped.get(storeId) ?? {
         id_cua_hang: storeId,
         ten_cua_hang: row.ten_cua_hang ?? store?.ten_cua_hang ?? 'Cửa hàng',
-        phi_van_chuyen: Number(store?.phi_van_chuyen_mac_dinh ?? 31000),
+        phi_van_chuyen: phiCuaHang,
+        khoang_cach_km: hasCoords
+          ? Math.round(this.tinhKhoangCach(viDo!, kinhDo!, Number(store!.vi_do), Number(store!.kinh_do)) * 10) / 10
+          : null,
         items: [],
       };
       const donGia = Number(row.gia_hien_tai ?? row.gia_tai_thoi_diem_them ?? 0);
@@ -1384,7 +1430,7 @@ export class UserCommerceService {
       throw new BadRequestException('Thiếu thông tin giao hàng bắt buộc');
     }
 
-    const preview = await this.xemTruocThanhToan(userId, dto.ma_khuyen_mai);
+    const preview = await this.xemTruocThanhToan(userId, dto.ma_khuyen_mai, dto.vi_do_giao, dto.kinh_do_giao);
     if (preview.groups.length === 0) {
       throw new BadRequestException('Không có dữ liệu đơn hàng để tạo');
     }
@@ -1430,6 +1476,8 @@ export class UserCommerceService {
       nguoi_nhan: dto.nguoi_nhan.trim(),
       so_dien_thoai_nhan: dto.so_dien_thoai_nhan.trim(),
       dia_chi_giao: dto.dia_chi_giao.trim(),
+      vi_do_giao: dto.vi_do_giao ?? null,
+      kinh_do_giao: dto.kinh_do_giao ?? null,
       ghi_chu_tai_xe: dto.ghi_chu_tai_xe?.trim() || null,
       phuong_thuc_thanh_toan: 'vnpay',
       tong_tien: preview.tong_tien,
@@ -1609,6 +1657,8 @@ export class UserCommerceService {
         nguoi_nhan: snapshot.nguoi_nhan,
         so_dien_thoai_nhan: snapshot.so_dien_thoai_nhan,
         dia_chi_giao: snapshot.dia_chi_giao,
+        vi_do_giao: snapshot.vi_do_giao ?? null,
+        kinh_do_giao: snapshot.kinh_do_giao ?? null,
         ghi_chu_tai_xe: snapshot.ghi_chu_tai_xe,
         nguon_don_hang: attribution.idNhaSangTao ? 'bai_viet' : 'truc_tiep',
         id_bai_viet_nguon: attribution.idBaiViet,
@@ -1752,7 +1802,7 @@ export class UserCommerceService {
       }
       if (status === 'da_giao') {
         counts.purchased += 1;
-        if (!reviewedOrderIds.has(Number(order.id))) {
+        if (reviewedOrderIds.has(Number(order.id))) {
           counts.review += 1;
         }
       }
@@ -1834,7 +1884,7 @@ export class UserCommerceService {
           })
         ).map((item) => Number(item.id_don_hang)),
       );
-      orders = ordersRaw.filter((item) => !reviewedOrderIds.has(Number(item.id)));
+      orders = ordersRaw.filter((item) => reviewedOrderIds.has(Number(item.id)));
     }
 
     const total = orders.length;
@@ -1890,7 +1940,7 @@ export class UserCommerceService {
           thoi_gian_giao: item.thoi_gian_giao,
           co_the_huy: item.trang_thai_don_hang === 'cho_xac_nhan',
           co_the_xac_nhan_da_nhan: item.trang_thai_don_hang === 'dang_giao',
-          co_the_hoan_tien: item.trang_thai_don_hang === 'da_giao',
+          co_the_hoan_tien: item.trang_thai_don_hang === 'da_giao' && !daDanhGia,
           co_the_danh_gia: item.trang_thai_don_hang === 'da_giao' && !daDanhGia,
           da_danh_gia: daDanhGia,
           trang_thai_hoan_tien:
@@ -2069,6 +2119,13 @@ export class UserCommerceService {
 
     if (order.trang_thai_don_hang !== 'da_giao') {
       throw new BadRequestException('Chỉ đơn hàng đã giao mới có thể yêu cầu hoàn tiền');
+    }
+
+    const daDanhGia = await this.danhGiaRepo.findOne({
+      where: { id_don_hang: Number(order.id), id_nguoi_danh_gia: userId },
+    });
+    if (daDanhGia) {
+      throw new BadRequestException('Đơn hàng đã được đánh giá, không thể yêu cầu hoàn tiền');
     }
 
     const payment = await this.thanhToanRepo.findOne({

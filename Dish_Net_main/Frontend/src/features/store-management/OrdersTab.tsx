@@ -12,6 +12,7 @@ import {
   fmtPhone,
 } from '@/shared/storeOrderApi';
 import { userCommerceApi } from '@/shared/userCommerceApi';
+import { useToast } from '@/shared/toast';
 
 /* ═══════════════════════════════════════════
    TYPES
@@ -35,6 +36,7 @@ interface StoreOrder {
   totalValue: string;
   deliveryAddress: string;
   remainingMinutes: string;
+  tongGiaHanPhut?: number;
   tag: 'Mới' | 'Sắp trễ' | 'Quá giờ';
   status: OrderTabKey;
   review?: { rating: number; text: string; images: string[] };
@@ -191,6 +193,7 @@ function mapApiOrder(item: StoreOrderItem, apiItems: StoreOrderDetail['danh_sach
     totalValue: fmt(item.tong_tien),
     deliveryAddress: item.dia_chi_giao,
     remainingMinutes: '',
+    tongGiaHanPhut: item.tong_gia_han_phut && item.tong_gia_han_phut > 0 ? item.tong_gia_han_phut : undefined,
     tag: 'Mới',
     status,
     cancelInfo,
@@ -495,6 +498,29 @@ function RejectRefundModal({ onClose, onReject }: { onClose: () => void; onRejec
 }
 
 /* ═══════════════════════════════════════════
+   COMPLETE ORDER CONFIRM MODAL
+   ═══════════════════════════════════════════ */
+function CompleteConfirmModal({ order, onClose, onConfirm }: { order: StoreOrder; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative w-full max-w-[420px] rounded-[16px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5">
+          <div /><h3 className="text-[17px] font-bold text-black">HOÀN THÀNH ĐƠN HÀNG</h3>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f0f0f0] text-[18px] text-[#555] transition hover:bg-[#e0e0e0]">×</button>
+        </div>
+        <div className="px-6 pb-6 pt-4">
+          <p className="text-[14px] text-[#444]">Bạn có chắc muốn đánh dấu đơn <span className="font-semibold text-black">#{order.ma_don_hang}</span> là đã hoàn thành?</p>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <button type="button" onClick={onClose} className="rounded-[10px] border border-[#ddd] bg-white px-8 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-50">Hủy</button>
+            <button type="button" onClick={onConfirm} className="rounded-[10px] bg-[#2e7d32] px-8 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#256b28]">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    CUSTOMER REVIEW MODAL
    ═══════════════════════════════════════════ */
 function ReviewModal({ order, onClose }: { order: StoreOrder; onClose: () => void }) {
@@ -614,6 +640,11 @@ function OrderCard({
           <span className="text-[15px] font-bold text-black">Mã đơn : #{order.ma_don_hang}</span>
           {order.status === 'pending' && <span className={`rounded-full px-3 py-0.5 text-[11px] font-bold ${tagColor}`}>{order.tag}</span>}
           {order.status === 'preparing' && <span className={`rounded-full px-3 py-0.5 text-[11px] font-bold ${tagColor}`}>{order.tag}</span>}
+          {order.tongGiaHanPhut ? (
+            <span className="rounded-full bg-[#fff3e0] px-3 py-0.5 text-[11px] font-bold text-[#e65100]">
+              ⏱ Đã gia hạn {order.tongGiaHanPhut} phút
+            </span>
+          ) : null}
         </div>
         <span className={`rounded-[6px] px-3 py-1 text-[12px] font-semibold ${badge.cls}`}>{badge.text}</span>
       </div>
@@ -911,6 +942,7 @@ function OrderDetailModal({ order, loading, onClose }: { order: StoreOrder | nul
    ORDERS TAB
    ═══════════════════════════════════════════ */
 export default function OrdersTab() {
+  const toast = useToast();
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [tabCounts, setTabCounts] = useState<TabCounts | null>(null);
   const [activeTab, setActiveTab] = useState<OrderTabKey>('pending');
@@ -927,6 +959,7 @@ export default function OrdersTab() {
   const [extendOrder, setExtendOrder] = useState<StoreOrder | null>(null);
   const [reviewOrder, setReviewOrder] = useState<StoreOrder | null>(null);
   const [rejectRefundOrder, setRejectRefundOrder] = useState<StoreOrder | null>(null);
+  const [completeOrder, setCompleteOrder] = useState<StoreOrder | null>(null);
   const [detailOrder, setDetailOrder] = useState<StoreOrder | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1014,7 +1047,7 @@ export default function OrdersTab() {
       setConfirmOrder(null);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Xác nhận thất bại');
+      toast.error(err instanceof Error ? err.message : 'Xác nhận thất bại');
     }
   };
 
@@ -1026,7 +1059,7 @@ export default function OrdersTab() {
       setRejectOrder(null);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Từ chối thất bại');
+      toast.error(err instanceof Error ? err.message : 'Từ chối thất bại');
     }
   };
 
@@ -1037,33 +1070,38 @@ export default function OrdersTab() {
       await storeOrderApi.giaoDonHang(order.ma_don_hang);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Cập nhật thất bại');
+      toast.error(err instanceof Error ? err.message : 'Cập nhật thất bại');
     }
   };
 
   const handleComplete = async (id: string) => {
     const order = orders.find((o) => o.id === id);
     if (!order) return;
-    if (!window.confirm('Đánh dấu đơn hàng này là đã hoàn thành?')) return;
+    setCompleteOrder(order);
+  };
+
+  const handleCompleteConfirm = async () => {
+    if (!completeOrder) return;
     try {
-      await storeOrderApi.hoanThanhDonHang(order.ma_don_hang);
+      await storeOrderApi.hoanThanhDonHang(completeOrder.ma_don_hang);
+      setCompleteOrder(null);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Hoàn thành đơn thất bại');
+      toast.error(err instanceof Error ? err.message : 'Hoàn thành đơn thất bại');
     }
   };
 
   const handleChatCustomer = async (id: string) => {
     const order = orders.find((o) => o.id === id);
     if (!order?.id_nguoi_mua) {
-      alert('Không xác định được khách hàng để nhắn tin');
+      toast.error('Không xác định được khách hàng để nhắn tin');
       return;
     }
     try {
       await userCommerceApi.batDauTroChuyen(Number(order.id_nguoi_mua));
       window.location.href = '/messages';
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Không thể bắt đầu trò chuyện');
+      toast.error(err instanceof Error ? err.message : 'Không thể bắt đầu trò chuyện');
     }
   };
 
@@ -1074,7 +1112,7 @@ export default function OrdersTab() {
       await storeOrderApi.giaHanDonHang(order.ma_don_hang, time);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gia hạn thất bại');
+      toast.error(err instanceof Error ? err.message : 'Gia hạn thất bại');
     }
   };
 
@@ -1085,7 +1123,7 @@ export default function OrdersTab() {
       await storeOrderApi.duyetHoanTien(order.ma_don_hang);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Duyệt hoàn tiền thất bại');
+      toast.error(err instanceof Error ? err.message : 'Duyệt hoàn tiền thất bại');
     }
   };
 
@@ -1097,7 +1135,7 @@ export default function OrdersTab() {
       setRejectRefundOrder(null);
       loadOrders(currentPage);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Từ chối thất bại');
+      toast.error(err instanceof Error ? err.message : 'Từ chối thất bại');
     }
   };
 
@@ -1320,6 +1358,13 @@ export default function OrdersTab() {
           order={detailOrder}
           loading={detailLoading}
           onClose={() => { setDetailOrder(null); }}
+        />
+      )}
+      {completeOrder && (
+        <CompleteConfirmModal
+          order={completeOrder}
+          onClose={() => setCompleteOrder(null)}
+          onConfirm={handleCompleteConfirm}
         />
       )}
     </div>

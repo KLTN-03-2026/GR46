@@ -15,6 +15,9 @@ export class ThongBaoEntity {
   @Column({ type: "bigint", unsigned: true })
   id_nguoi_nhan: number;
 
+  @Column({ type: "bigint", unsigned: true, nullable: true })
+  id_nguoi_gui: number | null;
+
   @Column({ type: "varchar", length: 30 })
   loai_thong_bao: string;
 
@@ -42,4 +45,8 @@ export class ThongBaoEntity {
   @ManyToOne(() => NguoiDungEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id_nguoi_nhan" })
   nguoi_nhan: NguoiDungEntity;
+
+  @ManyToOne(() => NguoiDungEntity, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "id_nguoi_gui" })
+  nguoi_gui: NguoiDungEntity | null;
 }

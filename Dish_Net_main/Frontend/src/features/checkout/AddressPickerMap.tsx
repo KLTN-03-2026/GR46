@@ -17,6 +17,7 @@ type Suggestion = {
 type AddressPickerMapProps = {
     address: string;
     onAddressChange: (next: string) => void;
+    onCoordsChange?: (lat: number, lng: number) => void;
     error?: string;
 };
 
@@ -29,7 +30,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
     return debounced;
 }
 
-export default function AddressPickerMap({ address, onAddressChange, error }: AddressPickerMapProps) {
+export default function AddressPickerMap({ address, onAddressChange, onCoordsChange, error }: AddressPickerMapProps) {
     const listboxId = useId();
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<MapLibreMap | null>(null);
@@ -65,6 +66,7 @@ export default function AddressPickerMap({ address, onAddressChange, error }: Ad
 
         marker.on('dragend', async () => {
             const { lng, lat } = marker.getLngLat();
+            onCoordsChange?.(lat, lng);
             try {
                 reverseLockRef.current = true;
                 const res = await fetch(
@@ -154,6 +156,7 @@ export default function AddressPickerMap({ address, onAddressChange, error }: Ad
             const f = data?.features?.[0];
             if (f && Array.isArray(f.center) && f.center.length >= 2) {
                 flyToAndPlaceMarker([f.center[0], f.center[1]]);
+                onCoordsChange?.(f.center[1], f.center[0]); // [lng, lat] → (lat, lng)
             }
         } catch {
             // ignore
@@ -164,6 +167,7 @@ export default function AddressPickerMap({ address, onAddressChange, error }: Ad
         skipNextSearchRef.current = true;
         lastGeocodedRef.current = s.place_name;
         onAddressChange(s.place_name);
+        onCoordsChange?.(s.center[1], s.center[0]); // center = [lng, lat]
         setSuggestions([]);
         setShowSuggestions(false);
         setActiveIndex(-1);

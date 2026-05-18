@@ -9,9 +9,10 @@ import { useAuth } from '@/shared/AuthContext';
 import { userContentApi } from '@/shared/userContentApi';
 import { userCommerceApi } from '@/shared/userCommerceApi';
 
+import LoginRequiredModal from '@/components/Auth/LoginRequiredModal';
 import { homeUiAssets } from './assets';
 import CommentModal from './CommentModal';
-import { mapFeedPosts } from './data';
+import { mapDeals, mapFeedPosts } from './data';
 import type { FeedPost, HomePageData, RankingItem, RankingMode, SpotlightCard } from './types';
 
 const FEED_PAGE_SIZE = 10;
@@ -289,6 +290,7 @@ function FeedPostCard({
     post,
     canFollow = true,
     canShare = true,
+    canReport = true,
     onComment,
     onOrder,
     onFollow,
@@ -301,6 +303,7 @@ function FeedPostCard({
     post: FeedPost;
     canFollow?: boolean;
     canShare?: boolean;
+    canReport?: boolean;
     onComment: () => void;
     onOrder: () => void;
     onFollow: () => void;
@@ -482,9 +485,11 @@ function FeedPostCard({
                     >
                         Chia sẻ · {post.shareCount}
                     </button>
+                    {canReport && (
                     <button onClick={(event) => { event.stopPropagation(); onReport(); }} className="inline-flex items-center gap-2 transition hover:text-[#c62828]">
                         Báo cáo
                     </button>
+                    )}
                     </div>
 
                     {post.dishLink || post.dishId ? (
@@ -1007,7 +1012,7 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
     const [activeMenuCategory, setActiveMenuCategory] = useState(data.menu.categories[0]?.id ?? '');
     const [menuQuery, setMenuQuery] = useState('');
     const [actionMessage, setActionMessage] = useState<string | null>(null);
-    const [spotlightCards] = useState<SpotlightCard[]>(data.spotlightCards);
+    const [spotlightCards, setSpotlightCards] = useState<SpotlightCard[]>(data.spotlightCards);
     const [menuData] = useState(data.menu);
     const dealSectionRef = useRef<HTMLElement | null>(null);
     const { dangNhap: isAuthenticated, nguoiDung } = useAuth();
@@ -1023,6 +1028,15 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
     const [isReportDoneModalOpen, setIsReportDoneModalOpen] = useState(false);
     const [isSubmittingReport, setIsSubmittingReport] = useState(false);
     const [reportTargetPost, setReportTargetPost] = useState<FeedPost | null>(null);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [loginModalTitle, setLoginModalTitle] = useState('Đăng nhập để tiếp tục nhé');
+
+    const requireAuth = useCallback((title?: string): boolean => {
+        if (isAuthenticated) return true;
+        setLoginModalTitle(title ?? 'Đăng nhập để tiếp tục nhé');
+        setIsLoginModalOpen(true);
+        return false;
+    }, [isAuthenticated]);
 
     const bumpPostCounter = useCallback(
         (
@@ -1173,7 +1187,30 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
 
     useEffect(() => {
         let active = true;
-        const syncFeed = async () => {
+
+        const mergeFeed = (latest: FeedPost[]) => {
+            setFeedPosts((current) => {
+                if (current.length === 0) return latest;
+                const latestMap = new Map(latest.map((p) => [p.id, p]));
+                // Update counts on existing posts, keep order intact
+                const merged = current.map((post) => {
+                    const fresh = latestMap.get(post.id);
+                    if (!fresh) return post;
+                    return {
+                        ...post,
+                        likeCount: fresh.likeCount,
+                        commentCount: fresh.commentCount,
+                        shareCount: fresh.shareCount,
+                    };
+                });
+                // Prepend genuinely new posts (not in current list)
+                const currentIds = new Set(current.map((p) => p.id));
+                const newPosts = latest.filter((p) => !currentIds.has(p.id));
+                return newPosts.length > 0 ? [...newPosts, ...merged] : merged;
+            });
+        };
+
+        const syncFeed = async (fullReplace = false) => {
             try {
                 const payload = (await userContentApi.layBangTin({
                     trang: 1,
@@ -1181,22 +1218,29 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                 })) as Record<string, unknown>;
                 if (!active) return;
                 const latest: FeedPost[] = mapFeedPosts(payload);
-                setFeedPosts(latest);
-                setFeedCurrentPage(1);
+                const latestDeals = mapDeals(payload);
+                if (fullReplace) {
+                    setFeedPosts(latest);
+                    setFeedCurrentPage(1);
+                } else {
+                    mergeFeed(latest);
+                }
+                setSpotlightCards(latestDeals);
             } catch {
                 // keep current UI state if sync fails
             }
         };
 
-        void syncFeed();
-        const onFocus = () => {
-            void syncFeed();
-        };
+        void syncFeed(true);
+        const onFocus = () => void syncFeed(true);
         window.addEventListener('focus', onFocus);
+
+        const intervalId = window.setInterval(() => void syncFeed(false), 30_000);
 
         return () => {
             active = false;
             window.removeEventListener('focus', onFocus);
+            window.clearInterval(intervalId);
         };
     }, [isAuthenticated]);
 
@@ -1319,10 +1363,10 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                             <div className="relative grid min-h-[420px] gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.6fr)] lg:items-center">
                                 <div className="max-w-[360px] text-white">
                                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/75">
-                                        {data.hero.eyebrow}
+                                        {spotlightCards.length > 0 ? data.hero.eyebrow : 'Khám phá ẩm thực'}
                                     </p>
                                     <h1 className="mt-3 text-4xl font-bold leading-tight sm:text-5xl">
-                                        {data.hero.title}
+                                        {spotlightCards.length > 0 ? 'Deal Hôm Nay' : 'Đề Xuất Cho Bạn'}
                                     </h1>
                                     <p className="mt-3 text-sm leading-6 text-white/85">
                                         {data.hero.description}
@@ -1480,14 +1524,16 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                         post={post}
                                         canFollow={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
                                         canShare={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
+                                        canReport={!nguoiDung || Number(post.authorId || 0) !== Number(nguoiDung.id)}
                                         onComment={() => {
                                             setActiveCommentStore(post.storeName || post.author || 'Bài viết');
-                                            setActiveCommentCoverImage(post.storeId ? (post.storeAvatar ?? null) : (post.authorAvatar ?? null));
+                                            setActiveCommentCoverImage(post.storeAvatar ?? post.authorAvatar ?? null);
                                             setActiveCommentPostId(Number(post.id) || null);
                                             setCommentComposerOpen(false);
                                             setIsCommentModalOpen(true);
                                         }}
                                         onOrder={() => {
+                                            if (!requireAuth('Đăng nhập để đặt món nhé')) return;
                                             const postId = Number(post.id);
                                             if (!Number.isFinite(postId) || postId <= 0) {
                                                 setActionMessage('Không xác định được bài viết để đặt món');
@@ -1524,6 +1570,7 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                                             router.push(`/profile/${targetId}`);
                                         }}
                                     onFollow={() => {
+                                        if (!requireAuth('Đăng nhập để theo dõi reviewer này nhé')) return;
                                         const targetId = Number(post.authorId || 0);
                                         if (!Number.isFinite(targetId) || targetId <= 0) {
                                             setActionMessage('Chưa có dữ liệu người dùng để theo dõi');
@@ -1622,34 +1669,43 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                             <div className="rounded-[16px] bg-white px-4 py-3 text-base font-semibold text-[#285e19] shadow-[0_6px_18px_rgba(0,0,0,0.06)]">
                                 Deal hôm nay
                             </div>
-                            {spotlightCards.slice(0, visibleDealCount).map((card) => (
-                                <SidebarStoreCard
-                                    key={card.id}
-                                    card={card}
-                                    onOpenGallery={() => {
-                                        setActiveGalleryCard(card);
-                                        setIsGalleryModalOpen(true);
-                                    }}
-                                    onOpenComment={() => {
-                                        setActiveCommentStore(card.title);
-                                        setActiveCommentPostId(
-                                            Number(feedPosts[0]?.id || 0) || null,
-                                        );
-                                        setCommentComposerOpen(true);
-                                        setIsCommentModalOpen(true);
-                                    }}
-                                    onOpenDetail={() => setActiveDealCard(card)}
-                                />
-                            ))}
-                            {hasMoreDeals ? (
-                                <button
-                                    type="button"
-                                    onClick={() => setVisibleDealCount((current) => current + 3)}
-                                    className="w-full rounded-[12px] border border-[#2f8f22] bg-white px-4 py-2 text-sm font-semibold text-[#2f8f22]"
-                                >
-                                    Xem thêm deal
-                                </button>
-                            ) : null}
+                            {spotlightCards.length === 0 ? (
+                                <div className="rounded-[14px] bg-white px-4 py-5 text-center shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+                                    <p className="text-[13px] font-medium text-[#285e19]">Chưa có deal lúc này</p>
+                                    <p className="mt-1 text-[12px] text-[#9ca3af]">Deal mở lúc 7h–9h · 11h–13h · 18h–20h</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {spotlightCards.slice(0, visibleDealCount).map((card) => (
+                                        <SidebarStoreCard
+                                            key={card.id}
+                                            card={card}
+                                            onOpenGallery={() => {
+                                                setActiveGalleryCard(card);
+                                                setIsGalleryModalOpen(true);
+                                            }}
+                                            onOpenComment={() => {
+                                                setActiveCommentStore(card.title);
+                                                setActiveCommentPostId(
+                                                    Number(feedPosts[0]?.id || 0) || null,
+                                                );
+                                                setCommentComposerOpen(true);
+                                                setIsCommentModalOpen(true);
+                                            }}
+                                            onOpenDetail={() => setActiveDealCard(card)}
+                                        />
+                                    ))}
+                                    {hasMoreDeals ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setVisibleDealCount((current) => current + 3)}
+                                            className="w-full rounded-[12px] border border-[#2f8f22] bg-white px-4 py-2 text-sm font-semibold text-[#2f8f22]"
+                                        >
+                                            Xem thêm deal
+                                        </button>
+                                    ) : null}
+                                </>
+                            )}
                         </div>
                     </section>
                 </section>
@@ -1906,6 +1962,13 @@ export default function HomePageClient({ data }: { data: HomePageData }) {
                 onCommentPosted={(postId) => {
                     bumpPostCounter(postId, 'commentCount', undefined, 1);
                 }}
+            />
+
+            <LoginRequiredModal
+                isOpen={isLoginModalOpen}
+                onClose={() => setIsLoginModalOpen(false)}
+                title={loginModalTitle}
+                returnUrl={typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/'}
             />
 
             <SharePostModal

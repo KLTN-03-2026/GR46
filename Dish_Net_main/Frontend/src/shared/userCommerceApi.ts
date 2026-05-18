@@ -246,10 +246,12 @@ export const userCommerceApi = {
 
   xoaTatCaGioHang: () => request('/user/gio-hang', { method: 'DELETE' }),
 
-  xemTruocThanhToan: (ma_khuyen_mai?: string) => {
-    const suffix = ma_khuyen_mai
-      ? `?ma_khuyen_mai=${encodeURIComponent(ma_khuyen_mai)}`
-      : '';
+  xemTruocThanhToan: (ma_khuyen_mai?: string, vi_do?: number | null, kinh_do?: number | null) => {
+    const params = new URLSearchParams();
+    if (ma_khuyen_mai) params.set('ma_khuyen_mai', ma_khuyen_mai);
+    if (vi_do != null) params.set('vi_do', String(vi_do));
+    if (kinh_do != null) params.set('kinh_do', String(kinh_do));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
     return request(`/user/thanh-toan/preview${suffix}`);
   },
 
@@ -259,6 +261,8 @@ export const userCommerceApi = {
     nguoi_nhan: string;
     so_dien_thoai_nhan: string;
     dia_chi_giao: string;
+    vi_do_giao?: number | null;
+    kinh_do_giao?: number | null;
     ghi_chu_tai_xe?: string;
     phuong_thuc_thanh_toan: 'vnpay';
     ma_khuyen_mai?: string;

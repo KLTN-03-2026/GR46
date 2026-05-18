@@ -20,6 +20,7 @@ import { MonAnEntity } from '../Admin/entities/mon-an.entity';
 import { ToppingEntity } from '../Admin/entities/topping.entity';
 import { KhuyenMaiEntity } from '../Admin/entities/khuyen-mai.entity';
 import { ThanhToanEntity } from '../User/entities/thanh-toan.entity';
+import { ThongBaoEntity } from '../Admin/entities/thong-bao.entity';
 import { StoreOrderTimeoutService } from './store-order-timeout.service';
 
 @Module({
@@ -35,6 +36,7 @@ import { StoreOrderTimeoutService } from './store-order-timeout.service';
       MonAnEntity,
       ToppingEntity,
       ThanhToanEntity,
+      ThongBaoEntity,
     ]),
   ],
   controllers: [

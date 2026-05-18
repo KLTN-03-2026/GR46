@@ -115,23 +115,54 @@ export default function OrderDetailView({ order, onBack }: { order: OrderDetailD
                     </div>
 
                     {/* RIGHT: Timeline */}
-                    <div className="rounded-[12px] border border-[#e8e8e8] p-5">
-                        <h3 className="text-[15px] font-bold text-black">Trạng thái đơn hàng</h3>
-                        <div className="relative mt-5 space-y-6 pl-6">
-                            <div className="absolute bottom-2 left-[9px] top-2 w-[2px] bg-[#e0e0e0]" />
-                            {order.timeline.map((step, i) => (
-                                <div key={i} className="relative flex items-center gap-4">
-                                    <div className={`absolute left-[-15px] flex h-5 w-5 items-center justify-center rounded-full ${step.done ? 'bg-[#2e7d32]' : 'border-2 border-[#ccc] bg-white'}`}>
-                                        {step.done && (
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="20 6 9 17 4 12" />
-                                            </svg>
-                                        )}
-                                    </div>
-                                    <span className={`flex-1 text-[13px] ${step.done ? 'text-black' : 'text-[#999]'}`}>{step.label}</span>
-                                    <span className="text-[13px] text-[#888]">{step.time}</span>
-                                </div>
-                            ))}
+                    <div className="rounded-[16px] border border-[#e8e8e8] bg-white p-5 shadow-sm">
+                        <h3 className="text-[14px] font-bold uppercase tracking-wide text-[#666]">Trạng thái đơn hàng</h3>
+                        <div className="relative mt-5 pl-8">
+                            {/* vertical line */}
+                            <div className="absolute bottom-3 left-[13px] top-3 w-[2px] bg-gradient-to-b from-[#2e7d32] via-[#a5d6a7] to-[#e0e0e0]" />
+                            <div className="space-y-6">
+                                {order.timeline.map((step, i) => {
+                                    const isActive = !step.done && order.timeline[i - 1]?.done;
+                                    return (
+                                        <div key={i} className="relative flex items-start gap-3">
+                                            {/* dot */}
+                                            <div className={`absolute left-[-22px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-all
+                                                ${step.done
+                                                    ? 'border-[#2e7d32] bg-[#2e7d32]'
+                                                    : isActive
+                                                        ? 'border-[#2e7d32] bg-white shadow-[0_0_0_4px_rgba(46,125,50,0.15)]'
+                                                        : 'border-[#ddd] bg-[#f5f5f5]'
+                                                }`}
+                                            >
+                                                {step.done ? (
+                                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <polyline points="20 6 9 17 4 12" />
+                                                    </svg>
+                                                ) : isActive ? (
+                                                    <span className="h-2 w-2 rounded-full bg-[#2e7d32]" />
+                                                ) : null}
+                                            </div>
+                                            {/* content */}
+                                            <div className="flex-1 min-w-0 pl-2">
+                                                <div className="flex flex-wrap items-center justify-between gap-1">
+                                                    <span className={`text-[13px] font-semibold leading-tight
+                                                        ${step.done ? 'text-[#1a1a1a]' : isActive ? 'text-[#2e7d32]' : 'text-[#bbb]'}`}>
+                                                        {step.label}
+                                                    </span>
+                                                    {isActive && (
+                                                        <span className="rounded-full bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-bold text-[#2e7d32]">Hiện tại</span>
+                                                    )}
+                                                </div>
+                                                {step.time ? (
+                                                    <span className="mt-0.5 block text-[11px] text-[#999]">{step.time}</span>
+                                                ) : (
+                                                    <span className="mt-0.5 block text-[11px] text-[#ccc]">—</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>

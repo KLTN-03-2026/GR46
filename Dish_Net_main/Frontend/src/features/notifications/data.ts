@@ -3,20 +3,28 @@ import { userCommerceApi } from '@/shared/userCommerceApi';
 export type NotificationItem = {
     id: string;
     avatar: string;
-    type: 'like' | 'support' | 'follow' | 'comment';
+    isSystemAvatar: boolean;
+    type: 'like' | 'support' | 'follow' | 'comment' | 'order';
     loaiThongBao?: string;
     loaiDoiTuong?: string;
     idDoiTuong?: number | null;
     message: string;
+    noi_dung?: string;
     time: string;
     isRead?: boolean;
 };
 
-const fallbackAvatar =
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80';
+export const SYSTEM_LOGO = '/images/logo.png';
 
-function mapType(loai?: string): NotificationItem['type'] {
+const SOCIAL_TYPES = ['tuong_tac', 'binh_luan', 'theo_doi'];
+
+function isSocialNotification(loai: string): boolean {
+    return SOCIAL_TYPES.some((t) => loai.includes(t));
+}
+
+export function mapType(loai?: string): NotificationItem['type'] {
     if (!loai) return 'support';
+    if (loai.includes('don_hang')) return 'order';
     if (loai.includes('tuong_tac')) return 'like';
     if (loai.includes('binh_luan')) return 'comment';
     if (loai.includes('theo_doi')) return 'follow';
@@ -27,11 +35,19 @@ export function resolveNotificationTarget(item: Pick<NotificationItem, 'loaiThon
     const loai = String(item.loaiThongBao ?? '').toLowerCase();
     const id = Number(item.idDoiTuong ?? 0);
 
+    if (loai.includes('don_hang')) {
+        return '/user/orders?tab=purchased';
+    }
+
     if (loai.includes('ho_tro')) {
         return id > 0 ? `/user/support?request=${id}` : '/user/support';
     }
 
-    if (loai.includes('tuong_tac') || loai.includes('binh_luan') || loai.includes('theo_doi')) {
+    if (loai.includes('theo_doi')) {
+        return id > 0 ? `/profile/${id}` : '/';
+    }
+
+    if (loai.includes('tuong_tac') || loai.includes('binh_luan')) {
         return id > 0 ? `/?post_id=${id}` : '/';
     }
 
@@ -58,22 +74,31 @@ function formatRelativeTime(input?: string | Date | null) {
     return `${diffWeeks} tuần trước`;
 }
 
+export function mapNotificationRow(item: any, index: number): NotificationItem {
+    const loai = String(item.loai_thong_bao ?? '');
+    const social = isSocialNotification(loai);
+    const senderAvatar = item?.nguoi_gui?.anh_dai_dien;
+
+    return {
+        id: String(item.id ?? `notification-${index}`),
+        avatar: social && senderAvatar ? String(senderAvatar) : SYSTEM_LOGO,
+        isSystemAvatar: !(social && senderAvatar),
+        type: mapType(loai),
+        loaiThongBao: loai,
+        loaiDoiTuong: String(item.loai_doi_tuong ?? ''),
+        idDoiTuong: item.id_doi_tuong != null ? Number(item.id_doi_tuong) : null,
+        message: String(item.tieu_de || item.noi_dung || 'Bạn có thông báo mới'),
+        noi_dung: item.noi_dung ? String(item.noi_dung) : undefined,
+        time: formatRelativeTime(item.ngay_tao),
+        isRead: Boolean(item.da_doc),
+    };
+}
+
 export async function getNotificationItems(): Promise<NotificationItem[]> {
     try {
         const payload: any = await userCommerceApi.layThongBao({ trang: 1, so_luong: 50 });
         const rows = Array.isArray(payload?.du_lieu) ? payload.du_lieu : [];
-
-        return rows.map((item: any, index: number) => ({
-            id: String(item.id ?? `notification-${index}`),
-            avatar: String(item?.nguoi_nhan?.anh_dai_dien ?? fallbackAvatar),
-            type: mapType(String(item.loai_thong_bao ?? '')),
-            loaiThongBao: String(item.loai_thong_bao ?? ''),
-            loaiDoiTuong: String(item.loai_doi_tuong ?? ''),
-            idDoiTuong: item.id_doi_tuong != null ? Number(item.id_doi_tuong) : null,
-            message: String(item.tieu_de || item.noi_dung || 'Bạn có thông báo mới'),
-            time: formatRelativeTime(item.ngay_tao),
-            isRead: Boolean(item.da_doc),
-        }));
+        return rows.map(mapNotificationRow);
     } catch {
         return [];
     }

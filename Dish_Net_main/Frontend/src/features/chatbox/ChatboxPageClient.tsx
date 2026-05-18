@@ -16,6 +16,7 @@ export default function ChatboxPageClient() {
     const [phienList, setPhienList] = useState<ChatbotPhien[]>([]);
     const [activeId, setActiveId] = useState<number | undefined>(undefined);
     const [resetKey, setResetKey] = useState(0);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
     const taiDanhSach = async () => {
         if (!dangNhap) return;
@@ -33,13 +34,18 @@ export default function ChatboxPageClient() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dangTai, dangNhap]);
 
-    const xoa = async (id: number) => {
-        if (!confirm('Xóa phiên chat này?')) return;
-        await chatboxApi.xoaPhien(id);
-        if (activeId === id) {
+    const xoa = (id: number) => {
+        setDeletingId(id);
+    };
+
+    const xoaConfirm = async () => {
+        if (deletingId === null) return;
+        await chatboxApi.xoaPhien(deletingId);
+        if (activeId === deletingId) {
             setActiveId(undefined);
             setResetKey((k) => k + 1);
         }
+        setDeletingId(null);
         await taiDanhSach();
     };
 
@@ -49,6 +55,19 @@ export default function ChatboxPageClient() {
     };
 
     return (
+        <>
+        {deletingId !== null && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setDeletingId(null)}>
+                <div className="w-full max-w-[360px] rounded-[16px] bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.18)]" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[15px] font-semibold text-black">Xóa phiên chat?</p>
+                    <p className="mt-1 text-[13px] text-[#666]">Toàn bộ lịch sử trò chuyện sẽ bị xóa vĩnh viễn.</p>
+                    <div className="mt-5 flex justify-end gap-3">
+                        <button type="button" onClick={() => setDeletingId(null)} className="rounded-[10px] border border-[#ddd] bg-white px-5 py-2 text-[13px] font-semibold text-black hover:bg-gray-50">Hủy</button>
+                        <button type="button" onClick={() => void xoaConfirm()} className="rounded-[10px] bg-[#d32f2f] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#b71c1c]">Xóa</button>
+                    </div>
+                </div>
+            </div>
+        )}
         <div className="mx-auto flex h-[calc(100dvh-64px)] w-full max-w-6xl gap-3 p-3">
             <aside className="hidden w-72 flex-col rounded-xl bg-white shadow-sm ring-1 ring-black/5 md:flex">
                 <div className="flex items-center justify-between border-b border-gray-200 p-3">
@@ -114,5 +133,6 @@ export default function ChatboxPageClient() {
                 <ChatboxPanel key={resetKey} variant="page" initialPhienId={activeId} />
             </div>
         </div>
+        </>
     );
 }

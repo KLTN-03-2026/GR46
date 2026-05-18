@@ -255,8 +255,13 @@ export const userContentApi = {
   layDanhSachDangTheoDoi: (tuKhoa?: string) =>
     request(`/user/nguoi-dung/danh-sach-dang-theo-doi${tuKhoa ? `?tu_khoa=${encodeURIComponent(tuKhoa)}` : ''}`),
 
-  layDanhSachNguoiTheoDoi: (tuKhoa?: string) =>
-    request(`/user/nguoi-dung/danh-sach-nguoi-theo-doi${tuKhoa ? `?tu_khoa=${encodeURIComponent(tuKhoa)}` : ''}`),
+  layDanhSachNguoiTheoDoi: (tuKhoa?: string, idNguoiDung?: number) => {
+    const params = new URLSearchParams();
+    if (tuKhoa) params.set('tu_khoa', tuKhoa);
+    if (idNguoiDung) params.set('id_nguoi_dung', String(idNguoiDung));
+    const qs = params.toString();
+    return request(`/user/nguoi-dung/danh-sach-nguoi-theo-doi${qs ? `?${qs}` : ''}`);
+  },
 
   xoaNguoiTheoDoi: (idNguoiDung: number) =>
     request(`/user/nguoi-dung/${idNguoiDung}/xoa-nguoi-theo-doi`, { method: 'DELETE' }),
@@ -288,6 +293,9 @@ export const userContentApi = {
   }) => request(`/user/kham-pha${toQueryString(query)}`),
 
   layChiTietCuaHang: (idCuaHang: number) => request(`/user/cua-hang/${idCuaHang}`),
+
+  layBaiVietCuaHang: (idCuaHang: number, query?: { trang?: number; so_luong?: number }) =>
+    request(`/user/cua-hang/${idCuaHang}/bai-viet${toQueryString(query)}`),
 
   layMonTheoDanhMuc: (
     idDanhMuc: number,

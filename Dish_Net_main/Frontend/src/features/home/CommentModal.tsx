@@ -566,7 +566,7 @@ export default function CommentModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden p-3" style={{ paddingTop: '4px' }}>
+          <div className="flex-1 overflow-y-auto p-3" style={{ paddingTop: '4px' }}>
             <div className="rounded-[16px] bg-[#f7f8f4] p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8e9488]">
                 Tóm tắt

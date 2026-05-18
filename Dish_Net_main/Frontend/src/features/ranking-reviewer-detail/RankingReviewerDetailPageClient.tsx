@@ -212,7 +212,7 @@ function VideoCard({ item }: { item: ReviewerVideo }) {
 export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer: RankingReviewerDetailData }) {
   const router = useRouter();
   const toast = useToast();
-  const { dangNhap } = useAuth();
+  const { dangNhap, nguoiDung } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [interaction, setInteraction] = useState<UserRelationState | null>(null);
@@ -428,6 +428,11 @@ export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full bg-[#fde8bf] px-5 py-3 text-[18px] font-bold text-[#211d11]">⭐ TOP REVIEWER</span>
+                  {reviewer.trustScore !== '0' ? (
+                    <span className="rounded-full bg-[#eaf4ea] px-4 py-2.5 text-[15px] font-semibold text-[#275d18]">
+                      Độ tin cậy: {reviewer.trustScore} ★
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
@@ -442,6 +447,7 @@ export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer
                   {interaction?.dang_theo_doi ? 'Đang theo dõi' : 'Theo dõi'}
                 </button>
                 <button type="button" onClick={() => void handleMessage()} className="min-w-[156px] rounded-[12px] bg-[#edf2ed] px-5 py-2.5 text-center text-[16px] font-bold text-[#161616]">Nhắn tin</button>
+                {Number(nguoiDung?.id) !== Number(reviewer.id) && (
                 <div className="relative">
                   <button type="button" onClick={() => setMenuOpen((v) => !v)} className="rounded-[10px] bg-[#f3f3f3] px-3.5 py-2.5 text-[16px]">•••</button>
                   {menuOpen ? (
@@ -451,6 +457,7 @@ export default function RankingReviewerDetailPageClient({ reviewer }: { reviewer
                     </div>
                   ) : null}
                 </div>
+                )}
               </div>
               {actionMsg ? <p className="mt-3 text-sm text-[#2f8f22]">{actionMsg}</p> : null}
             </div>

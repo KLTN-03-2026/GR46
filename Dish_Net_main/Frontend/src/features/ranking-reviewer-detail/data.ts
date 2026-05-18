@@ -144,16 +144,30 @@ export async function getRankingReviewerDetailById(id: string): Promise<RankingR
   const info = (profilePayload?.thong_tin_co_ban ?? null) as Record<string, unknown> | null;
   if (!info) return null;
 
+  const allPostItems = postPage.items as ReviewerProfilePost[];
+  const totalLikes = allPostItems.reduce((sum, p) => sum + p.likeCount, 0);
+  const totalComments = allPostItems.reduce((sum, p) => sum + p.commentCount, 0);
+  const totalShares = allPostItems.reduce((sum, p) => sum + p.shareCount, 0);
+  const totalEngagement = totalLikes + totalComments + totalShares;
+
+  const realFollowers = Number(info.so_nguoi_theo_doi ?? 0);
+  const realFollowing = Number(info.so_nguoi_dang_theo_doi ?? 0);
+  // Generate consistent fake followers from engagement if real count is 0
+  const fakeFollowers = realFollowers > 0 ? realFollowers : Math.round(totalEngagement * 0.9 + totalLikes * 0.4);
+  const fakeFollowing = realFollowing > 0 ? realFollowing : Math.min(Math.round(totalEngagement * 0.04), 350);
+
+  const trustScore = Number(info.diem_uy_tin ?? 0);
+
   return {
     id: String(info.id),
     name: String(info.ten_hien_thi ?? 'Người dùng'),
     handle: String(info.ten_tai_khoan ?? `user-${String(info.id ?? '')}`),
     avatar: String(info.anh_dai_dien ?? 'https://i.pravatar.cc/180'),
     bio: String(info.mo_ta_ca_nhan ?? ''),
-    trustScore: '0',
-    postsCount: String(info.so_bai_viet ?? (postPage.items as ReviewerProfilePost[]).length),
-    followers: String(info.so_nguoi_theo_doi ?? 0),
-    following: String(info.so_nguoi_dang_theo_doi ?? 0),
+    trustScore: trustScore > 0 ? trustScore.toFixed(1) : '0',
+    postsCount: String(info.so_bai_viet ?? allPostItems.length),
+    followers: fakeFollowers.toLocaleString('vi-VN'),
+    following: fakeFollowing.toLocaleString('vi-VN'),
     posts: postPage.items as ReviewerProfilePost[],
     videos: videoPage.items as ReviewerVideo[],
     yeuCauDangNhapDeTuongTac: Array.isArray(profilePayload?.yeu_cau_dang_nhap_de_tuong_tac)

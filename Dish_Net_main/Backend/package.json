@@ -8,6 +8,8 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
+    "prestart": "npx --yes kill-port 3009 & exit /b 0",
+    "prestart:dev": "npx --yes kill-port 3009 & exit /b 0",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:nodemon": "nodemon",

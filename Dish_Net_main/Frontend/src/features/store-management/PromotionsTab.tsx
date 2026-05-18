@@ -10,6 +10,7 @@ import {
   SortOption,
   fmt,
 } from '@/shared/storePromotionApi';
+import { useToast } from '@/shared/toast';
 
 /* ═══════════════════════════════════════════
    TYPES
@@ -482,6 +483,7 @@ function PromoCard({
    PROMOTIONS TAB
    ═══════════════════════════════════════════ */
 export default function PromotionsTab() {
+  const toast = useToast();
   const [promos, setPromos] = useState<PromoUI[]>([]);
   const [searchText, setSearchText] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
@@ -546,7 +548,7 @@ export default function PromotionsTab() {
       setShowAddModal(false);
       await fetchPromos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Đã xảy ra lỗi');
+      toast.error(err instanceof Error ? err.message : 'Đã xảy ra lỗi');
     } finally {
       setIsLoading(false);
     }
@@ -560,7 +562,7 @@ export default function PromotionsTab() {
       setDeleteTarget(null);
       await fetchPromos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Xóa thất bại');
+      toast.error(err instanceof Error ? err.message : 'Xóa thất bại');
     } finally {
       setIsLoading(false);
     }
@@ -571,7 +573,7 @@ export default function PromotionsTab() {
       await storePromotionApi.tamDung(Number(promo.id));
       await fetchPromos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Tạm dừng thất bại');
+      toast.error(err instanceof Error ? err.message : 'Tạm dừng thất bại');
     }
   };
 
@@ -580,7 +582,7 @@ export default function PromotionsTab() {
       await storePromotionApi.kichHoat(Number(promo.id));
       await fetchPromos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Kích hoạt thất bại');
+      toast.error(err instanceof Error ? err.message : 'Kích hoạt thất bại');
     }
   };
 

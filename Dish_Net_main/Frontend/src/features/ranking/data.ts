@@ -43,8 +43,8 @@ export type RankingFilterQuery = {
 const EMPTY: RankingPageData = {
   stores: {
     label: 'Cửa hàng',
-    filters: ['Số đơn hàng', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
-    columns: { primary: 'Cửa hàng', score: 'Đánh giá', metric: 'Số đơn hàng', finalMetric: 'Tỉ lệ hủy' },
+    filters: ['Lượt bán', 'Đánh giá', 'Trạng thái', 'Tỷ lệ hủy'],
+    columns: { primary: 'Cửa hàng', score: 'Đánh giá', metric: 'Lượt bán', finalMetric: 'Tỉ lệ hủy' },
     rows: [],
   },
   reviewers: {
@@ -121,9 +121,10 @@ export async function getRankingData(
       rank: Number(item.xep_hang || 0),
       name: item.ten_mon_an,
       secondaryName: item.ten_cua_hang,
+      secondaryHref: item.id_cua_hang ? `/explore/store/${item.id_cua_hang}` : undefined,
       score: scoreText(Number(item.diem_danh_gia || 0)),
       metric: `${item.so_luong_da_ban || 0}`,
-      href: `/ranking/food/${item.id}`,
+      href: `/explore/store/${item.id_cua_hang}`,
     }));
   }
 

@@ -38,7 +38,10 @@ export default function UserQuickActions() {
     const [messagePreviews, setMessagePreviews] = useState<MessagePreviewItem[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
 
-    const shouldShow = dangNhap && nguoiDung?.vai_tro === 'nguoi_dung';
+    const isStoreOrAdminPage = pathname.startsWith('/store') || pathname.startsWith('/admin');
+    const shouldShow = dangNhap &&
+        (nguoiDung?.vai_tro === 'nguoi_dung' || nguoiDung?.vai_tro === 'chu_cua_hang') &&
+        !isStoreOrAdminPage;
 
     useEffect(() => {
         const syncCart = async () => {
