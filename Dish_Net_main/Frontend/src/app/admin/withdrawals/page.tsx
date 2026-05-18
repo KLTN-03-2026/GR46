@@ -108,12 +108,12 @@ export default function WithdrawalsPage() {
     {
       key: 'ma_yeu_cau',
       label: 'Mã yêu cầu',
-      render: (v) => <span className="font-mono text-xs text-gray-600">{String(v)}</span>,
+      render: (row) => <span className="font-mono text-xs text-gray-600">{row.ma_yeu_cau}</span>,
     },
     {
       key: 'nguoi_dung',
       label: 'Người dùng',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <p className="font-medium text-sm text-gray-800">{row.nguoi_dung?.ten_hien_thi ?? '—'}</p>
           <p className="text-xs text-gray-400">{row.nguoi_dung?.email ?? ''}</p>
@@ -123,7 +123,7 @@ export default function WithdrawalsPage() {
     {
       key: 'tai_khoan_ngan_hang',
       label: 'Tài khoản ngân hàng',
-      render: (_, row) =>
+      render: (row) =>
         row.tai_khoan_ngan_hang ? (
           <div>
             <p className="text-sm font-medium text-gray-800">{row.tai_khoan_ngan_hang.ten_ngan_hang}</p>
@@ -135,13 +135,13 @@ export default function WithdrawalsPage() {
     {
       key: 'so_tien',
       label: 'Số tiền',
-      render: (v) => <span className="font-semibold text-[#d32f2f]">{formatMoney(Number(v))}</span>,
+      render: (row) => <span className="font-semibold text-[#d32f2f]">{formatMoney(Number(row.so_tien))}</span>,
     },
     {
       key: 'trang_thai',
       label: 'Trạng thái',
-      render: (v) => {
-        const s = v as TrangThaiRutTien;
+      render: (row) => {
+        const s = row.trang_thai;
         return (
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusColor[s] ?? 'bg-gray-100 text-gray-600'}`}>
             {statusLabel[s] ?? s}
@@ -152,12 +152,12 @@ export default function WithdrawalsPage() {
     {
       key: 'thoi_gian_yeu_cau',
       label: 'Thời gian yêu cầu',
-      render: (v) => <span className="text-xs text-gray-500">{formatDate(v as string)}</span>,
+      render: (row) => <span className="text-xs text-gray-500">{formatDate(row.thoi_gian_yeu_cau)}</span>,
     },
     {
       key: 'id',
       label: 'Thao tác',
-      render: (_, row) =>
+      render: (row) =>
         row.trang_thai === 'dang_xu_ly' ? (
           <div className="flex gap-2">
             <button
