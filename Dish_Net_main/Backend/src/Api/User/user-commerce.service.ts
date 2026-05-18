@@ -1535,11 +1535,11 @@ export class UserCommerceService {
 
       await this.thanhToanRepo.save({
         id_don_hang: Number(order.id),
-        cong_thanh_toan: phuongThuc === 'tien_mat' ? 'tien_mat' : 'vnpay',
+        cong_thanh_toan: phuongThuc === 'tien_mat' ? null : 'vnpay',
         ma_giao_dich: maGiaoDich,
         phuong_thuc_thanh_toan: phuongThuc,
         so_tien: Number(order.tong_thanh_toan),
-        trang_thai_thanh_toan: phuongThuc === 'tien_mat' ? 'cho_thu_tien' : 'thanh_cong',
+        trang_thai_thanh_toan: phuongThuc === 'tien_mat' ? 'cho_thanh_toan' : 'thanh_cong',
         thoi_gian_thanh_toan: now,
         so_tien_hoan_tien: null,
         thoi_gian_hoan_tien: null,
